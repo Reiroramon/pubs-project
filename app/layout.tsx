@@ -4,15 +4,17 @@ import type { ReactNode } from "react";
 
 const poppins = Poppins({
   subsets: ["latin"],
-  weight: ["400", "600", "700"], // sesuaikan sesuai kebutuhan
+  weight: ["400", "600", "700"],
 });
 
 export const metadata = {
-  title: "PUBS Burning Token",
-  description: "Burn your tokens with style 🔥",
+  title: "Pubs Burn",
+  description: "Burn Your Dump",
+  icons: {
+    icon: "/favicon.png", // <-- tambahkan ini
+  },
 };
 
-// Tambahkan tipe untuk props
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
