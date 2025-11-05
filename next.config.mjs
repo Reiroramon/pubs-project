@@ -1,20 +1,33 @@
-/** @type {import('next').NextConfig} */
+// next.config.mjs
+import os from 'os';
+
+function getLocalIPs() {
+  const interfaces = os.networkInterfaces();
+  const ips = [];
+
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        ips.push(iface.address);
+      }
+    }
+  }
+
+  return ips;
+}
+
+const localIPs = getLocalIPs();
 
 const nextConfig = {
   reactStrictMode: true,
-
-  images: {
-    domains: ["images.unsplash.com", "cdn.farcaster.xyz", "ipfs.io"],
-  },
-
-  // Hilangkan bagian "env" di sini
-  // karena kita akan pakai .env.local untuk menyimpan key rahasia
-
-  turbopack: (config) => {
-    config.externals.push("pino-pretty", "lokijs", "encoding");
-    return config;
-  },
+  // Hanya berlaku di development
+  ...(process.env.NODE_ENV === 'development' && {
+    allowedDevOrigins: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      ...localIPs.map(ip => `http://${ip}:3000`),
+    ],
+  }),
 };
 
 export default nextConfig;
-
