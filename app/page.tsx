@@ -1,5 +1,11 @@
-"use client";
+"use client"; 
+import { Bungee_Shade } from "next/font/google";
+const fireFont = Bungee_Shade({
+  subsets: ["latin"],
+  weight: "400",
+});
 import React, { useState } from "react";
+import { motion } from "framer-motion";
 import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import axios from "axios";
@@ -57,15 +63,22 @@ function PUBSBurner() {
   if (!ready) return <div className="text-center text-white">Loading Privy...</div>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-900 via-black to-gray-900 flex flex-col items-center justify-center gap-6 p-6">
-      <h1 className="text-4xl font-bold text-green-400">🔥 PUBS Burning Token</h1>
+    <div
+  className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 bg-cover bg-center"
+  style={{ backgroundImage: "url('/background.png')" }}
+>
+
+     <motion.h1
+  className="fire-text text-9xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-green-500 to-green-400">
+     PUBS BURN
+</motion.h1>
 
       {!authenticated ? (
         <button
           onClick={connectFarcaster}
           className="bg-green-500 hover:bg-green-600 px-6 py-3 rounded-lg"
         >
-          Connect Farcaster Wallet
+          Connect Wallet
         </button>
       ) : (
         <div className="bg-black/50 p-6 rounded-xl w-96 text-center">
@@ -125,7 +138,7 @@ function PUBSBurner() {
         </div>
       )}
 
-      <footer className="text-gray-500 text-xs mt-6">© 2025 PUBS Protocol</footer>
+      <footer className="text-gray-500 text-xs mt-6">Protect Users Burn Scams</footer>
     </div>
   );
 }

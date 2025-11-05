@@ -13,6 +13,7 @@
     "@privy-io/react-auth": "^3.5.1",
     "axios": "^1.13.2",
     "ethers": "^6.15.0",
+    "framer-motion": "^12.23.24",
     "next": "16.0.1",
     "react": "19.2.0",
     "react-dom": "19.2.0"

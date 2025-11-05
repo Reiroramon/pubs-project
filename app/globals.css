@@ -18,7 +18,15 @@
 
 /* Apply variables */
 body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
+  color: white;
+  background-color: black;
 }
+@keyframes flame {
+  0%, 100% { text-shadow: 0 0 10px #c8ff00, 0 0 20px #c8ff00, 0 0 30px #c3ff00; }
+  50% { text-shadow: 0 0 20px #c8ff00, 0 0 40px #c8ff00, 0 0 60px #c3ff00; }
+}
+
+.fire-text {
+  animation: flame 1.5s infinite alternate;
+}
+
