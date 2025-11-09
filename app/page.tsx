@@ -1,11 +1,7 @@
-"use client"; 
-import { Bungee_Shade } from "next/font/google";
-const fireFont = Bungee_Shade({
-  subsets: ["latin"],
-  weight: "400",
-});
-import React, { useState } from "react";
-import { motion } from "framer-motion";
+"use client";
+
+import { useEffect, useState } from "react";
+import { sdk } from "@farcaster/miniapp-sdk";
 import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import axios from "axios";
@@ -19,6 +15,7 @@ const ABI = [
 function PUBSBurner() {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
+
   const [tokenAddr, setTokenAddr] = useState("");
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState("");
@@ -46,7 +43,6 @@ function PUBSBurner() {
       setStatus("🔥 Sending burn transaction...");
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
-
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
       const fee = ethers.parseEther("0.001");
       const tx = await contract.burnToken(tokenAddr, ethers.parseUnits(amount, 18), { value: fee });
@@ -64,47 +60,32 @@ function PUBSBurner() {
 
   return (
     <div
-  className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 bg-cover bg-center"
-  style={{ backgroundImage: "url('/mbekground.jpg')" }}
->
-<h1
-  className="text-9xl font-bold text-[#00ff00] drop-shadow-[0_0_10px_#00ff00]"
-  style={{
-    WebkitTextStroke: "2px #ffffff", // outline tebal
-    color: "transparent",
-    textShadow: "0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00",
-  }}
->
-  PUBS BURN
-</h1>
-
-  {!authenticated ? (
-  <button
-    onClick={connectFarcaster}
-    className="px-6 py-3 rounded-lg font-bold text-white border-2 border-[#00ff00] hover:bg-[#00ff00] hover:text-black transition-all duration-300 drop-shadow-[0_0_10px_#00ff00]"
-    style={{
-      WebkitTextStroke: "0.3px #00ff00",
-      textShadow: "0 0 6px #00ff00, 0 0 10px #00ff00",
-    }}
-  >
-    Connect Wallet
-  </button>
-) : (
-  <div className="bg-black/50 p-6 rounded-xl w-96 text-center border border-[#00ff00]/30 shadow-[0_0_15px_#00ff00]">
-    <p
-      className="text-sm mb-3 font-bold"
-      style={{
-        color: "#00ff00",
-        WebkitTextStroke: "0.5px #00ff00",
-        textShadow: "0 0 8px #00ff00, 0 0 12px #00ff00",
-      }}
+      className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 bg-cover bg-center"
+      style={{ backgroundImage: "url('/mbekground.jpg')" }}
     >
-      Connected as:{" "}
-      <span className="text-[#00ff00] font-bold drop-shadow-[0_0_10px_#00ff00]">
-        {user?.wallet?.address}
-      </span>
-    </p>
+      <h1
+        className="text-9xl font-bold text-[#00ff00] drop-shadow-[0_0_10px_#00ff00]"
+        style={{
+          WebkitTextStroke: "2px #ffffff",
+          color: "transparent",
+          textShadow: "0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00",
+        }}
+      >
+        PUBS BURN
+      </h1>
 
+      {!authenticated ? (
+        <button
+          onClick={connectFarcaster}
+          className="px-6 py-3 rounded-lg font-bold text-white border-2 border-[#00ff00] hover:bg-[#00ff00] hover:text-black transition-all duration-300"
+        >
+          Connect Wallet
+        </button>
+      ) : (
+        <div className="bg-black/50 p-6 rounded-xl w-96 text-center border border-[#00ff00]/30 shadow-[0_0_15px_#00ff00]">
+          <p className="text-sm mb-3 text-[#00ff00] font-bold">
+            Connected as: {user?.wallet?.address}
+          </p>
 
           <input
             type="text"
@@ -122,17 +103,11 @@ function PUBSBurner() {
             className="w-full p-2 mb-3 rounded-lg text-black"
           />
 
-          <button
-            onClick={scanToken}
-            className="w-full py-2 bg-blue-500 hover:bg-blue-600 rounded-lg mb-2"
-          >
+          <button onClick={scanToken} className="w-full py-2 bg-blue-500 hover:bg-blue-600 rounded-lg mb-2">
             🔍 Scan Token
           </button>
 
-          <button
-            onClick={burnToken}
-            className="w-full py-2 bg-red-600 hover:bg-red-700 rounded-lg"
-          >
+          <button onClick={burnToken} className="w-full py-2 bg-red-600 hover:bg-red-700 rounded-lg">
             🔥 Burn Now
           </button>
 
@@ -143,16 +118,13 @@ function PUBSBurner() {
               href={`https://basescan.org/tx/${txHash}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 underline text-sm"
+              className="text-[#00ff00] underline text-sm font-bold drop-shadow-[0_0_10px_#00ff00] mt-2 inline-block"
             >
-              View on BaseScan
+              View on BaseScan 🔗
             </a>
           )}
 
-          <button
-            onClick={() => logout()}
-            className="mt-4 w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg"
-          >
+          <button onClick={logout} className="mt-4 w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg">
             Logout
           </button>
         </div>
@@ -164,23 +136,30 @@ function PUBSBurner() {
 }
 
 export default function HomePage() {
+  // MiniApp Ready
+  useEffect(() => {
+    sdk.actions.ready();
+  }, []);
+
   return (
-    <PrivyProvider
-      appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID!}
-      config={{
-        appearance: {
-          theme: "dark",
-          accentColor: "#00ff9d",
-        },
-        loginMethods: ["wallet", "farcaster"],
-        embeddedWallets: {
-          ethereum: {
-            createOnLogin: "users-without-wallets",
+    <div>
+      <PrivyProvider
+        appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID!}
+        config={{
+          appearance: {
+            theme: "dark",
+            accentColor: "#00ff9d",
           },
-        },
-      }}
-    >
-      <PUBSBurner />
-    </PrivyProvider>
+          loginMethods: ["wallet", "farcaster"],
+          embeddedWallets: {
+            ethereum: {
+              createOnLogin: "users-without-wallets",
+            },
+          },
+        }}
+      >
+        <PUBSBurner />
+      </PrivyProvider>
+    </div>
   );
 }
