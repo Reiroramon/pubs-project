@@ -65,26 +65,46 @@ function PUBSBurner() {
   return (
     <div
   className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 bg-cover bg-center"
-  style={{ backgroundImage: "url('/background.png')" }}
+  style={{ backgroundImage: "url('/mbekground.jpg')" }}
 >
+<h1
+  className="text-9xl font-bold text-[#00ff00] drop-shadow-[0_0_10px_#00ff00]"
+  style={{
+    WebkitTextStroke: "2px #ffffff", // outline tebal
+    color: "transparent",
+    textShadow: "0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00",
+  }}
+>
+  PUBS BURN
+</h1>
 
-     <motion.h1
-  className="fire-text text-9xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-green-500 to-green-400">
-     PUBS BURN
-</motion.h1>
+  {!authenticated ? (
+  <button
+    onClick={connectFarcaster}
+    className="px-6 py-3 rounded-lg font-bold text-white border-2 border-[#00ff00] hover:bg-[#00ff00] hover:text-black transition-all duration-300 drop-shadow-[0_0_10px_#00ff00]"
+    style={{
+      WebkitTextStroke: "0.3px #00ff00",
+      textShadow: "0 0 6px #00ff00, 0 0 10px #00ff00",
+    }}
+  >
+    Connect Wallet
+  </button>
+) : (
+  <div className="bg-black/50 p-6 rounded-xl w-96 text-center border border-[#00ff00]/30 shadow-[0_0_15px_#00ff00]">
+    <p
+      className="text-sm mb-3 font-bold"
+      style={{
+        color: "#00ff00",
+        WebkitTextStroke: "0.5px #00ff00",
+        textShadow: "0 0 8px #00ff00, 0 0 12px #00ff00",
+      }}
+    >
+      Connected as:{" "}
+      <span className="text-[#00ff00] font-bold drop-shadow-[0_0_10px_#00ff00]">
+        {user?.wallet?.address}
+      </span>
+    </p>
 
-      {!authenticated ? (
-        <button
-          onClick={connectFarcaster}
-          className="bg-green-500 hover:bg-green-600 px-6 py-3 rounded-lg"
-        >
-          Connect Wallet
-        </button>
-      ) : (
-        <div className="bg-black/50 p-6 rounded-xl w-96 text-center">
-          <p className="text-gray-400 text-sm mb-3">
-            Connected as: <span className="text-green-300">{user?.wallet?.address}</span>
-          </p>
 
           <input
             type="text"
@@ -138,7 +158,7 @@ function PUBSBurner() {
         </div>
       )}
 
-      <footer className="text-gray-500 text-xs mt-6">Protect Users Burn Scams</footer>
+      <footer className="text-gray-500 text-xs mt-4">Protect Users Burn Scams</footer>
     </div>
   );
 }
