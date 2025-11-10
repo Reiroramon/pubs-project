@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
-import { useAccount, useWalletClient } from "wagmi";
-import { encodeFunctionData, erc20Abi } from "viem";
+import { useAccount } from "wagmi";
+import { encodeFunctionData } from "viem";
 import { ethers } from "ethers";
 
 const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
@@ -14,26 +14,22 @@ const ABI = [
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
+
   const [status, setStatus] = useState("");
   const [tokens, setTokens] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const { data: walletClient } = useWalletClient();
+  const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
 
   useEffect(() => {
     sdk.actions.ready();
   }, []);
 
   const loadTokens = async () => {
-    setStatus("Fetching tokens...");
-    if (!address) return;
-
+    setStatus("Loading wallet tokens...");
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
-    if (!key) {
-      setStatus("❗ Masukkan NEXT_PUBLIC_ALCHEMY_KEY dulu");
-      return;
-    }
+    if (!address || !key) return;
 
-    const res = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+    const result = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -42,91 +38,167 @@ export default function HomePage() {
         method: "alchemy_getTokenBalances",
         params: [address],
       }),
-    });
+    }).then((r) => r.json());
 
-    const json = await res.json();
-    const list = json?.result?.tokenBalances ?? [];
-    setTokens(list);
+    const list = result?.result?.tokenBalances ?? [];
+
+    const final = await Promise.all(
+      list.map(async (t: any) => {
+        const meta = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: 2,
+            jsonrpc: "2.0",
+            method: "alchemy_getTokenMetadata",
+            params: [t.contractAddress],
+          }),
+        }).then((r) => r.json());
+
+        const { decimals, name, symbol, logo } = meta?.result ?? {};
+        const balance = Number(ethers.formatUnits(t.tokenBalance, decimals ?? 18));
+
+        const priceRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${t.contractAddress}`)
+          .then((r) => r.json())
+          .catch(() => null);
+
+        const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
+        const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
+
+        return {
+          address: t.contractAddress,
+          name: name || symbol || "Unknown",
+          symbol: symbol || "TKN",
+          decimals: decimals ?? 18,
+          balance,
+          logoUrl,
+          price,
+        };
+      })
+    );
+
+    setTokens(final.filter((t) => t.balance > 0));
     setStatus("✅ Token loaded");
   };
 
-  const burnSelected = async () => {
+  const burn = async () => {
     try {
-      if (!walletClient || selected.length === 0) return;
+      if (!selected.length) return setStatus("Pilih token dulu.");
 
-      setStatus("🔥 Preparing batch burn...");
+      setStatus("🔥 Preparing burn...");
 
-      const provider = new ethers.BrowserProvider(walletClient.transport);
+      // ✅ Provider langsung ke wallet Farcaster (tidak pakai wagmi transport lagi)
+      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
 
-      let calls: any[] = [];
+      const txs = [];
 
-      for (const token of selected) {
-        const amount = ethers.parseUnits("100000000000", 18); // BURN ALL TOKEN
-        const [feeWei] = await contract.quoteErc20Fee(token, amount);
+      for (const tokenAddress of selected) {
+        const row = tokens.find((t) => t.address === tokenAddress);
+        if (!row) continue;
 
-        calls.push({
+        const amountWei = ethers.parseUnits(row.balance.toString(), row.decimals);
+        const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
+
+        txs.push({
           to: CONTRACT,
-          data: contract.interface.encodeFunctionData("burnToken", [
-            token,
-            amount,
-            JSON.stringify({ source: "miniapp", batch: true }),
-          ]),
           value: feeWei,
+          data: contract.interface.encodeFunctionData("burnToken", [
+            row.address,
+            amountWei,
+            JSON.stringify({ safe: true }),
+          ]),
         });
       }
 
-      const tx = await (walletClient as any).sendCalls({ calls });
+      // ✅ Batch send (miniapp native EIP-5792)
+      const res = await (sdk as any).wallet.ethProvider.request({
+        method: "wallet_sendCalls",
+        params: [{ calls: txs }],
+      });
 
-      setStatus("⏳ Waiting confirmation...");
-      await provider.waitForTransaction(tx);
-      setStatus("✅ Burn complete!");
-    } catch (err: any) {
-      setStatus("❌ " + err.message);
+      setLastBurnTx(res?.transactionHash || res?.hash || null);
+      setStatus("✅ Burn success!");
+    } catch (e: any) {
+      setStatus("❌ " + e.message);
     }
   };
 
+  const shareWarpcast = () => {
+    if (!lastBurnTx) return;
+    sdk.actions.openUrl(
+      `https://warpcast.com/~/compose?text=${encodeURIComponent(
+        "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
+      )}`
+    );
+  };
+
   return (
-    <div className="p-6 text-white bg-[#1e1e1e] min-h-screen">
-      <h1 className="text-4xl font-bold mb-4">PUBS BURN (Wagmi Version)</h1>
+    <div className="min-h-screen bg-[#111] text-gray-100 p-6">
+      <h1 className="text-4xl font-bold mb-6 text-center">PUBS BURN</h1>
 
-      {!isConnected && <p>Connecting Wallet...</p>}
-      {isConnected && <p>Wallet: {address}</p>}
+      {isConnected ? (
+        <p className="text-center text-gray-400 mb-4">Wallet: {address}</p>
+      ) : (
+        <p className="text-center">Connecting wallet...</p>
+      )}
 
-      <button onClick={loadTokens} className="mt-4 px-4 py-2 bg-blue-600 rounded">
-        Load Tokens
+      <button
+        onClick={loadTokens}
+        className="w-full bg-[#3b82f6] py-3 rounded-lg mb-4 font-semibold hover:bg-[#5ea1ff]"
+      >
+        🔄 Load Tokens
       </button>
 
-      <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
+      <div className="max-h-[420px] overflow-y-auto divide-y divide-[#222] border border-[#333] rounded-xl">
         {tokens.map((t) => {
-          const checked = selected.includes(t.contractAddress);
+          const active = selected.includes(t.address);
           return (
             <button
-              key={t.contractAddress}
+              key={t.address}
               onClick={() =>
                 setSelected(
-                  checked
-                    ? selected.filter((x) => x !== t.contractAddress)
-                    : [...selected, t.contractAddress]
+                  active ? selected.filter((x) => x !== t.address) : [...selected, t.address]
                 )
               }
-              className="block w-full p-3 rounded bg-[#2c2c2c] hover:bg-[#383838]"
+              className={`flex items-center w-full px-4 py-3 text-left hover:bg-[#1a1a1a] transition ${
+                active ? "bg-[#193c29]" : ""
+              }`}
             >
-              {checked ? "✅ " : ""}{t.contractAddress}
+              <img src={t.logoUrl} className="w-8 h-8 rounded-full mr-3" />
+              <div className="flex-1">
+                <div className="font-medium">{t.name}</div>
+                <div className="text-xs text-gray-400">
+                  {t.symbol} • {t.balance.toFixed(4)}
+                </div>
+              </div>
+              <div className="text-sm text-gray-300">${t.price ?? "-"}</div>
+              <div className="ml-3 w-5 h-5 rounded border border-gray-500">
+                {active && <div className="w-full h-full bg-[#2ecc71] rounded" />}
+              </div>
             </button>
           );
         })}
       </div>
 
       <button
-        onClick={burnSelected}
-        className="mt-4 w-full py-3 bg-red-600 rounded shadow"
+        onClick={burn}
+        className="mt-5 w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold"
       >
         🔥 Burn Selected
       </button>
 
-      <p className="mt-3 text-gray-300">{status}</p>
+      {lastBurnTx && (
+        <button
+          onClick={shareWarpcast}
+          className="mt-4 w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold"
+        >
+          📣 Share on Warpcast
+        </button>
+      )}
+
+      <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
     </div>
   );
 }
