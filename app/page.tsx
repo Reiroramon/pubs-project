@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { ethers } from "ethers";
+import Leaderboard from "./components/Leaderboard";
 
-// ======= CONFIG =======
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!; // isi di .env.local / Vercel
-const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_KEY;            // opsional (untuk list token wallet)
-const GOPLUS_KEY  = process.env.NEXT_PUBLIC_GOPLUS_KEY;             // opsional (untuk auto-scan)
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
+const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
+const GOPLUS_KEY = process.env.NEXT_PUBLIC_GOPLUS_KEY;
 
 // ABI final
 const ABI = [
@@ -15,108 +15,79 @@ const ABI = [
   "function burnToken(address token, uint256 amount, string scanSummary) payable",
 ];
 
-// ======= DATA: stablecoins/official di Base (blok) =======
-const BLOCKED_TOKENS_BASE = new Set<string>(
+// Block stablecoins/official tokens on Base
+const BLOCKED_TOKENS_BASE = new Set(
   [
-    // USDC native (Base)
-    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    // USDbC (bridged)
-    "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA",
-    // DAI (Base)
-    "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb",
-    // cbETH (contoh resmi)
-    "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22",
-  ].map((a) => a.toLowerCase())
+    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC native
+    "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA", // USDbC
+    "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", // DAI
+    "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22", // cbETH
+  ].map(a => a.toLowerCase())
 );
 
-// ======= Types =======
-type TokenRow = {
-  address: string;
-  symbol: string;
-  name: string;
-  balance: string;         // raw balance (wei)
-  decimals: number;
-  priceUsd?: number | null;
-  logo?: string | null;
-  blocked?: boolean;       // stable/resmi -> disabled
-};
-
-// ======= Helper =======
-const fmtUsd = (n?: number | null) =>
-  n == null ? "-" : (n >= 1 ? n.toFixed(2) : n.toFixed(4));
+// utilities
+const fmtUsd = (n?: number | null): string =>
+  n == null || Number.isNaN(n) ? "-" : n >= 1 ? n.toFixed(2) : n.toFixed(6);
 
 const short = (addr: string) => `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 
-async function fetchDexscreenerPrice(tokenAddr: string) {
+async function fetchDexscreenerPrice(addr: string) {
   try {
-    const r = await fetch(
-      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`
-    );
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
     const j = await r.json();
-    const first = j?.pairs?.[0];
-    const price = first?.priceUsd ? Number(first.priceUsd) : null;
-    // coba ambil logo coingecko dari pair info jika ada
-    const logo =
-      first?.info?.imageUrl ||
-      null;
-    return { price, logo };
-  } catch {
-    return { price: null, logo: null };
-  }
-}
-
-async function scanWithGoPlus(tokenAddr: string) {
-  if (!GOPLUS_KEY) {
-    return { ok: false, reason: "Scan skipped (no GOPLUS key)" };
-  }
-  try {
-    const url = `https://api.gopluslabs.io/api/v1/token_security/8453?contract_addresses=${tokenAddr}`;
-    const r = await fetch(url, { headers: { "Referer": "https://warpcast.com" } });
-    const j = await r.json();
-    const rec = j?.result?.[tokenAddr.toLowerCase()];
-    if (!rec) return { ok: false, reason: "No record" };
-    // contoh flags sederhana
-    const isHoneypot = rec.is_honeypot === "1" || rec.transfer_pausable === "1";
-    const canMint    = rec.can_mint    === "1";
-    const hiddenOwner= rec.hidden_owner === "1";
-    const bad = isHoneypot || canMint || hiddenOwner;
+    const p = j?.pairs?.[0];
     return {
-      ok: !bad,
-      reason: bad
-        ? `Risk: ${[
-            isHoneypot && "honeypot",
-            canMint && "canMint",
-            hiddenOwner && "hiddenOwner",
-          ]
-            .filter(Boolean)
-            .join(", ")}`
-        : "Looks OK by GoPlus",
+      price: p?.priceUsd ? Number(p.priceUsd) : null,
+      logo: p?.info?.imageUrl || null,
+      liquidity: p?.liquidity?.usd ? Number(p.liquidity.usd) : null,
     };
   } catch {
-    return { ok: false, reason: "Scan error" };
+    return { price: null, logo: null, liquidity: null };
   }
 }
 
-// ======= MAIN PAGE =======
+async function scanWithGoPlus(addr: string) {
+  if (!GOPLUS_KEY) return { ok: false, reason: "Scan skipped (no GoPlus key)" };
+
+  try {
+    const url = `https://api.gopluslabs.io/api/v1/token_security/8453?contract_addresses=${addr}`;
+    const r = await fetch(url);
+    const j = await r.json();
+    const rec = j?.result?.[addr.toLowerCase()];
+    if (!rec) return { ok: false, reason: "No record" };
+
+    const honeypot = rec.is_honeypot === "1" || rec.transfer_pausable === "1";
+    const mint = rec.can_mint === "1";
+    const hidden = rec.hidden_owner === "1";
+    const risky = honeypot || mint || hidden;
+
+    return {
+      ok: !risky,
+      reason: risky
+        ? `Risk: ${[
+            honeypot && "honeypot",
+            mint && "mintable",
+            hidden && "hiddenOwner",
+          ].filter(Boolean).join(", ")}`
+        : "Looks OK",
+    };
+  } catch {
+    return { ok: false, reason: "Scan failed" };
+  }
+}
+
 export default function HomePage() {
   const [wallet, setWallet] = useState<string | null>(null);
-  const [tokens, setTokens] = useState<TokenRow[]>([]);
-  const [loadingList, setLoadingList] = useState(false);
+  const [tokens, setTokens] = useState<any[]>([]);
+  const [selectedAddr, setSelectedAddr] = useState("");
+  const [status, setStatus] = useState("");
+  const [txHash, setTxHash] = useState("");
 
-  const [selectedAddr, setSelectedAddr] = useState<string>("");
-  const [amount, setAmount] = useState<string>(""); // amount in human units
-  const [status, setStatus] = useState<string>("");
-  const [txHash, setTxHash] = useState<string>("");
-
-  // ready + get wallet
   useEffect(() => {
-    sdk.actions.ready(); // panggil secepat UI siap
-
+    sdk.actions.ready();
     (async () => {
       try {
-        const accounts: string[] = await (sdk as any).wallet.ethProvider.request({
-          method: "eth_requestAccounts",
-        });
+        const accounts = await (sdk as any).wallet.ethProvider.request({ method: "eth_requestAccounts" });
         setWallet(accounts?.[0] ?? null);
       } catch {
         setWallet(null);
@@ -124,299 +95,143 @@ export default function HomePage() {
     })();
   }, []);
 
-  // load tokens from wallet (opsional Alchemy)
   useEffect(() => {
-    if (!wallet) return;
+    if (!wallet || !ALCHEMY_KEY) return;
     (async () => {
-      setLoadingList(true);
+      setStatus("Loading tokens...");
       try {
-        let result: TokenRow[] = [];
+        const r = await fetch(`https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "alchemy_getTokenBalances", params: [wallet] }),
+        });
+        const j = await r.json();
+        const balances = j?.result?.tokenBalances || [];
+        const slice = balances.slice(0, 50);
 
-        if (ALCHEMY_KEY) {
-          // Alchemy getTokenBalances
-          const body = {
-            id: 1,
-            jsonrpc: "2.0",
-            method: "alchemy_getTokenBalances",
-            params: [wallet],
-          };
-          const r = await fetch(
-            `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
-            { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }
-          );
-          const j = await r.json();
-          const balances: { contractAddress: string; tokenBalance: string }[] =
-            j?.result?.tokenBalances ?? [];
+        const out: any[] = [];
+        for (const b of slice) {
+          const addr = b.contractAddress;
+          const meta = await fetch(`https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 2,
+              method: "alchemy_getTokenMetadata",
+              params: [addr],
+            }),
+          }).then(r => r.json());
+          const m = meta?.result || {};
+          const dec = Number(m.decimals ?? 18);
+          const bal = b.tokenBalance || "0";
 
-          // ambil metadata untuk decimals/symbol/name
-          const metaReq = {
-            id: 2,
-            jsonrpc: "2.0",
-            method: "alchemy_getTokenMetadata",
-            params: [] as any[],
-          };
+          const { price, logo, liquidity } = await fetchDexscreenerPrice(addr);
 
-          // batasi 50 token agar ringan
-          const slice = balances.slice(0, 50);
-
-          const rows: TokenRow[] = [];
-          for (const tb of slice) {
-            const addr = tb.contractAddress;
-            // metadata satu2 supaya aman di browser
-            const mr = await fetch(
-              `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
-              {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  ...metaReq,
-                  params: [addr],
-                }),
-              }
-            );
-            const mj = await mr.json();
-            const md = mj?.result || {};
-            const decimals = Number(md.decimals ?? 18);
-            const symbol = md.symbol || "TOKEN";
-            const name = md.name || symbol;
-
-            // price + logo via Dexscreener
-            const { price, logo } = await fetchDexscreenerPrice(addr);
-
-            rows.push({
+          // HANYA TAMPILKAN TOKEN DENGAN LIQUIDITY < $30k = kemungkinan scam lebih tinggi
+          if (!liquidity || liquidity < 30000) {
+            out.push({
               address: addr,
-              symbol,
-              name,
-              balance: tb.tokenBalance || "0",
-              decimals,
+              symbol: m.symbol || "TOKEN",
+              name: m.name || m.symbol || "Token",
+              decimals: dec,
+              balance: bal,
               priceUsd: price,
-              logo: logo ?? null,
+              liquidity,
+              logo,
               blocked: BLOCKED_TOKENS_BASE.has(addr.toLowerCase()),
             });
           }
-          result = rows;
-        } else {
-          // tanpa Alchemy -> kosong (user pilih manual)
-          result = [];
         }
 
-        setTokens(result);
+        setTokens(out);
+        setStatus("");
       } catch {
         setTokens([]);
-      } finally {
-        setLoadingList(false);
+        setStatus("Failed load token list");
       }
     })();
   }, [wallet]);
 
-  const selectedToken = useMemo(
-    () => tokens.find((t) => t.address.toLowerCase() === selectedAddr.toLowerCase()),
+  const selected = useMemo(
+    () => tokens.find(t => t.address.toLowerCase() === selectedAddr.toLowerCase()),
     [tokens, selectedAddr]
   );
 
-  // Auto Scan
-  const handleAutoScan = async () => {
-    if (!selectedAddr) {
-      setStatus("⚠️ Pilih token dulu.");
-      return;
-    }
-    if (BLOCKED_TOKENS_BASE.has(selectedAddr.toLowerCase())) {
-      setStatus("⛔ Token resmi/stable diblok agar tidak salah bakar.");
-      return;
-    }
-
-    setStatus("🔍 Auto-scan in progress…");
-    const res = await scanWithGoPlus(selectedAddr);
-    if (res.ok) {
-      setStatus("✅ Scan OK: " + res.reason);
-    } else {
-      setStatus("⚠️ Scan info: " + res.reason);
-    }
-  };
-
-  // Burn
   const handleBurn = async () => {
     try {
-      if (!selectedAddr) {
-        setStatus("⚠️ Pilih token dulu.");
-        return;
-      }
-      if (!amount || Number(amount) <= 0) {
-        setStatus("⚠️ Masukkan jumlah > 0");
-        return;
-      }
-      if (BLOCKED_TOKENS_BASE.has(selectedAddr.toLowerCase())) {
-        setStatus("⛔ Token resmi/stable tidak bisa dibakar.");
-        return;
-      }
+      if (!selected) return setStatus("Select a token first");
+      if (selected.blocked) return setStatus("Blocked token (stable/official)");
 
-      setStatus("🔥 Menyiapkan transaksi…");
+      // gunakan seluruh balance user
+      const amountWei = ethers.parseUnits(
+        ethers.formatUnits(selected.balance, selected.decimals),
+        selected.decimals
+      );
 
-      // cast ke EIP-1193 agar tidak bentrok tipe
+      setStatus("Preparing tx...");
       const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+      const [feeWei] = await contract.quoteErc20Fee(selected.address, amountWei);
 
-      const decimals = selectedToken?.decimals ?? 18;
-      const amountWei = ethers.parseUnits(amount, decimals);
+      const scan = await scanWithGoPlus(selected.address);
+      const scanSummary = JSON.stringify({ auto: true, result: scan.reason, ts: Date.now() });
 
-      const [feeWei] = await contract.quoteErc20Fee(selectedAddr, amountWei);
+      const tx = await contract.burnToken(selected.address, amountWei, scanSummary, { value: feeWei });
 
-      const scanSummary = JSON.stringify({
-        source: "miniapp",
-        automatedScan: !!GOPLUS_KEY,
-        ts: Date.now(),
-      });
-
-      const tx = await contract.burnToken(selectedAddr, amountWei, scanSummary, {
-        value: feeWei,
-      });
-
-      setStatus("⏳ Menunggu konfirmasi…");
-      const receipt = await tx.wait();
-      setStatus("✅ Burn sukses!");
-      setTxHash(receipt?.hash ?? tx.hash);
+      setStatus("Confirming...");
+      const rc = await tx.wait();
+      setTxHash(rc?.hash || tx.hash);
+      setStatus("✅ Burned successfully");
     } catch (e: any) {
-      setStatus("❌ Error: " + (e?.message || "Unknown"));
+      setStatus("❌ " + (e?.message || "Error"));
     }
   };
 
-  // ========== UI (abu-abu + hijau lembut) ==========
   return (
-    <div className="min-h-screen bg-[#1e1e1e] text-[#f5f5f5]">
-      <div className="max-w-xl mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm">
-            {wallet ? `Wallet: ${short(wallet)}` : "Wallet: -"}
-          </div>
-          <div className="text-lg font-semibold">PUBS BURN</div>
+    <div className="min-h-screen bg-[#1f1f1f] text-white p-4">
+      <div className="max-w-xl mx-auto">
+        <div className="mb-4 text-sm opacity-70">Wallet: {wallet ? short(wallet) : "-"}</div>
+
+        <div className="text-xl font-semibold mb-3">Select Token to Burn</div>
+
+        <div className="border border-[#333] rounded-xl max-h-[420px] overflow-y-auto divide-y divide-[#333]">
+          {tokens.map(t => {
+            const selectedMark = selectedAddr.toLowerCase() === t.address.toLowerCase();
+            const bal = Number(ethers.formatUnits(t.balance, t.decimals));
+            return (
+              <button
+                key={t.address}
+                disabled={t.blocked}
+                onClick={() => setSelectedAddr(t.address)}
+                className={`w-full flex items-center px-3 py-3 gap-3 text-left ${t.blocked ? "opacity-40 cursor-not-allowed" : "hover:bg-[#2a2a2a]"}`}
+              >
+                <img src={t.logo || "https://www.coingecko.com/coins/images/1/small/bitcoin.png"} className="w-8 h-8 rounded-full" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium">{t.name}</div>
+                  <div className="text-xs opacity-60">{t.symbol} • {bal.toLocaleString()} • {short(t.address)}</div>
+                </div>
+                <div className="text-sm opacity-75">${fmtUsd(t.priceUsd)}</div>
+                <div className={`w-5 h-5 rounded border ${selectedMark ? "bg-green-500 border-green-500" : "border-gray-600"}`} />
+              </button>
+            );
+          })}
         </div>
 
-        {/* Selector bar */}
-        <div className="flex items-center justify-between rounded-lg px-3 py-2 bg-[#262626] border border-[#2f2f2f]">
-          <div className="text-sm">{selectedAddr ? "1 selected" : "0 selected"}</div>
-          <div className="flex items-center gap-4 text-sm">
-            <button
-              className="hover:underline"
-              onClick={() => {
-                // contoh: pilih 1st (maks 1 untuk burn aman)
-                if (tokens.length) setSelectedAddr(tokens[0].address);
-              }}
-            >
-              Select 1
-            </button>
-            <button className="hover:underline" onClick={() => setSelectedAddr("")}>
-              Clear
-            </button>
-          </div>
-        </div>
+        <button onClick={handleBurn} className="mt-4 w-full py-3 rounded-lg bg-red-600 hover:bg-red-700 font-semibold">
+          🔥 Burn Selected Token
+        </button>
+<button onClick={handleBurn}>🔥 Burn Now</button>
 
-        {/* List */}
-        <div className="mt-3 rounded-xl overflow-hidden border border-[#2f2f2f]">
-          <div className="max-h-[420px] overflow-y-auto divide-y divide-[#2a2a2a]">
-            {loadingList && (
-              <div className="p-4 text-sm text-gray-400">Loading tokens…</div>
-            )}
+<Leaderboard />
 
-            {!loadingList && tokens.length === 0 && (
-              <div className="p-4 text-sm text-gray-400">
-                Tidak ada list. Isi manual di bawah atau set <code>NEXT_PUBLIC_ALCHEMY_KEY</code>.
-              </div>
-            )}
-
-            {tokens.map((t) => {
-              const isSelected = selectedAddr.toLowerCase() === t.address.toLowerCase();
-              const disabled = !!t.blocked;
-              const balHuman = (() => {
-                try {
-                  return Number(ethers.formatUnits(t.balance, t.decimals));
-                } catch {
-                  return 0;
-                }
-              })();
-
-              return (
-                <button
-                  key={t.address}
-                  onClick={() => !disabled && setSelectedAddr(t.address)}
-                  className={`w-full text-left px-3 py-3 flex items-center gap-3 ${
-                    disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-[#2a2a2a]"
-                  }`}
-                >
-                  <img
-                    src={t.logo || "https://www.coingecko.com/coins/images/1/thumb/bitcoin.png"}
-                    alt={t.symbol}
-                    className="w-8 h-8 rounded-full object-cover"
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold">{t.name}</div>
-                    <div className="text-xs text-gray-400">
-                      {t.symbol} • {balHuman.toLocaleString()} • {short(t.address)}
-                    </div>
-                  </div>
-                  <div className="text-sm mr-3">
-                    ${fmtUsd(t.priceUsd)}
-                  </div>
-                  <div
-                    className={`w-6 h-6 rounded-md border ${
-                      isSelected ? "bg-[#2ecc71] border-[#2ecc71]" : "border-[#3a3a3a]"
-                    }`}
-                  />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Manual input (fallback & kontrol jumlah) */}
-        <div className="mt-4 space-y-2">
-          <input
-            value={selectedAddr}
-            onChange={(e) => setSelectedAddr(e.target.value)}
-            placeholder="Token address (manual)"
-            className="w-full px-3 py-2 rounded-lg bg-[#262626] border border-[#2f2f2f] outline-none"
-          />
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="Amount to burn"
-            className="w-full px-3 py-2 rounded-lg bg-[#262626] border border-[#2f2f2f] outline-none"
-          />
-        </div>
-
-        {/* Actions */}
-        <div className="mt-4 space-y-2">
-          <button
-            onClick={handleAutoScan}
-            className="w-full py-3 rounded-lg bg-[#2e7dd7] hover:opacity-90 font-semibold"
-          >
-            🔍 Auto Scan (Anti Rugcheck)
-          </button>
-          <button
-            onClick={handleBurn}
-            className="w-full py-3 rounded-lg bg-[#e03a3a] hover:opacity-90 font-semibold"
-          >
-            🔥 Burn Now
-          </button>
-          {status && (
-            <div className="text-sm mt-2 text-gray-300">{status}</div>
-          )}
-          {txHash && (
-            <a
-              href={`https://basescan.org/tx/${txHash}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm underline text-[#7ddc9c]"
-            >
-              View on BaseScan
-            </a>
-          )}
-        </div>
-
-        <div className="text-[11px] text-gray-500 mt-6">
-          Stablecoin & token resmi otomatis diblok dari pemilihan. Gunakan manual jika scan kurang akurat.
-        </div>
+        {status && <div className="mt-3 text-sm opacity-80">{status}</div>}
+        {txHash && (
+          <a href={`https://basescan.org/tx/${txHash}`} target="_blank" className="text-sm text-green-400 underline mt-2 inline-block">
+            View on BaseScan
+          </a>
+        )}
       </div>
     </div>
   );
