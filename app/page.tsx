@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { ethers } from "ethers";
-import Leaderboard from "./components/Leaderboard";
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
 const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
@@ -222,9 +221,6 @@ export default function HomePage() {
         <button onClick={handleBurn} className="mt-4 w-full py-3 rounded-lg bg-red-600 hover:bg-red-700 font-semibold">
           🔥 Burn Selected Token
         </button>
-<button onClick={handleBurn}>🔥 Burn Now</button>
-
-<Leaderboard />
 
         {status && <div className="mt-3 text-sm opacity-80">{status}</div>}
         {txHash && (
