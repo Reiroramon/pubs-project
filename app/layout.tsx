@@ -1,23 +1,18 @@
-import type { ReactNode } from "react";
 import "./globals.css";
+import Providers from "./providers";
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export const metadata = {
+  title: "PUBS Burn",
+  description: "Burn scam tokens safely.",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body
-        style={{
-          backgroundColor: "#1e1e1e", // abu-abu gelap
-          color: "#f5f5f5", // teks abu terang
-          minHeight: "100vh",
-          margin: 0,
-        }}
-      >
-        {children}
+      <body>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
-export const metadata = {
-  title: "Pubs Burn",
-  description: "Protect User Burn Scam",
-};
+
