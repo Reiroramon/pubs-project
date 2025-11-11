@@ -32,3 +32,11 @@ body {
     0 0 4px rgba(255,255,255,0.3),
     0 0 10px rgba(255,255,255,0.1);
 }
+/* globals.css */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE dan Edge */
+  scrollbar-width: none; /* Firefox */
+}

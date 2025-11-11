@@ -24,6 +24,7 @@ export default function HomePage() {
 
   const loadTokens = async () => {
     if (!address) return setStatus("⚠️ Wallet belum terhubung");
+
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
     if (!key) return setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum di isi");
 
@@ -83,7 +84,7 @@ export default function HomePage() {
 
   const burn = async () => {
     if (!address) return setStatus("⚠️ Wallet belum terhubung");
-    if (!selected.length) return setStatus("⚠️ Tidak ada token yang dipilih");
+    if (!selected.length) return setStatus("Pilih token dulu.");
 
     try {
       setStatus("🔥 Preparing burn...");
@@ -93,6 +94,7 @@ export default function HomePage() {
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
 
       const calls = [];
+
       for (const tokenAddress of selected) {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
@@ -118,32 +120,30 @@ export default function HomePage() {
 
       setLastBurnTx(res?.transactionHash || res?.hash || null);
       setStatus("✅ Burn success!");
-    } catch (err: any) {
-      setStatus("❌ " + err.message);
+    } catch (e: any) {
+      setStatus("❌ " + e.message);
     }
   };
 
   const shareWarpcast = () => {
     if (!lastBurnTx) return;
     sdk.actions.openUrl(
-      `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
-      )}`
+      `https://warpcast.com/~/compose?text=${encodeURIComponent("I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain")}`
     );
   };
 
   return (
-    <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-6 flex flex-col items-center overflow-hidden">
+    <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-6 flex flex-col items-center">
 
       <h1 className="text-3xl font-bold mb-2 text-center">PUBS BURN</h1>
-
       <p className="text-sm text-gray-400 mb-4 text-center">
         {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
 
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#333] overflow-hidden">
 
-        <div className="flex justify-end p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
+        {/* SELECT ALL */}
+        <div className="flex justify-end p-2 border-b border-[#222] bg-[#111] sticky top-0">
           <button
             onClick={() =>
               selected.length === tokens.length
@@ -156,15 +156,14 @@ export default function HomePage() {
           </button>
         </div>
 
-        <div className="flex-1 max-h-[380px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
+        {/* AUTO HEIGHT SCROLL LIST */}
+        <div className="overflow-y-auto divide-y divide-[#222] no-scrollbar" style={{ maxHeight: "calc(100vh - 300px)" }}>
           {tokens.map((t) => {
             const active = selected.includes(t.address);
             return (
               <button
                 key={t.address}
-                onClick={() =>
-                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
-                }
+                onClick={() => setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])}
                 className={`flex items-center w-full px-4 py-3 hover:bg-[#1a1a1a] transition ${
                   active ? "bg-[#193c29]" : ""
                 }`}
@@ -185,18 +184,13 @@ export default function HomePage() {
           })}
         </div>
 
+        {/* BUTTONS */}
         <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-3">
-          <button
-            onClick={burn}
-            className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold"
-          >
+          <button onClick={burn} className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold">
             🔥 Burn Selected {selected.length > 0 && `(${selected.length})`}
           </button>
 
-          <button
-            onClick={loadTokens}
-            className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold"
-          >
+          <button onClick={loadTokens} className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold">
             🔄 Load Tokens
           </button>
         </div>
