@@ -23,15 +23,10 @@ export default function HomePage() {
     sdk.actions.ready();
   }, []);
 
-  // ✅ AUTO LOAD TOKENS — saat wallet siap
+  // ✅ AUTO LOAD TOKENS when wallet ready
   useEffect(() => {
     if (!isConnected || !address) return;
-
-    // delay 350ms agar provider & RPC ready (ini yang bikin sebelumnya gagal)
-    const t = setTimeout(() => {
-      loadTokens();
-    }, 350);
-
+    const t = setTimeout(loadTokens, 350);
     return () => clearTimeout(t);
   }, [isConnected, address]);
 
@@ -69,12 +64,13 @@ export default function HomePage() {
         }).then((r) => r.json());
 
         const { decimals, name, symbol, logo } = meta?.result ?? {};
-       const balance = ethers.formatUnits(t.tokenBalance, decimals ?? 18); // <-- simpan string
+        const decimalsSafe = decimals ?? 18;
 
+        const balanceString = ethers.formatUnits(t.tokenBalance, decimalsSafe);
 
-        const priceRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${t.contractAddress}`)
-          .then((r) => r.json())
-          .catch(() => null);
+        const priceRes = await fetch(
+          `https://api.dexscreener.com/latest/dex/tokens/${t.contractAddress}`
+        ).then((r) => r.json()).catch(() => null);
 
         const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
         const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
@@ -83,18 +79,18 @@ export default function HomePage() {
           address: t.contractAddress,
           name: name || symbol || "Unknown",
           symbol: symbol || "TKN",
-          decimals: decimals ?? 18,
-          balance,
+          decimals: decimalsSafe,
+          balance: balanceString,   // display only
+          rawBalance: t.tokenBalance, // ✅ for burning (BigInt safe)
           logoUrl,
           price,
         };
       })
     );
 
-    setTokens(final.filter((t) => t.balance > 0));
+    setTokens(final.filter((t) => Number(t.balance) > 0));
     setStatus("Ready to burn");
   };
-
 
   const burn = async () => {
     if (!selected.length) return setStatus("Select token to burn.");
@@ -112,9 +108,10 @@ export default function HomePage() {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
-       const amountWei = ethers.parseUnits(row.balance, row.decimals);
-       const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
-       
+        // ✅ Use rawBalance – no rounding error
+        const amountWei = BigInt(row.rawBalance);
+        const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
+
         calls.push({
           to: CONTRACT,
           value: feeWei,
@@ -134,7 +131,7 @@ export default function HomePage() {
       setLastBurnTx(res?.transactionHash || res?.hash || null);
       setStatus("✅ Burn Success!");
       setSelected([]);
-      loadTokens(); // auto refresh after burn
+      loadTokens();
 
     } catch (e: any) {
       setStatus("❌ " + e.message);
@@ -151,103 +148,88 @@ export default function HomePage() {
   };
 
   return (
-  <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-6 flex flex-col items-center overflow-hidden">
+    <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-6 flex flex-col items-center overflow-hidden">
 
-    <h1 className="text-3xl font-bold mb-2 text-center">PUBS BURN</h1>
+      <h1 className="text-3xl font-bold mb-2 text-center">PUBS BURN</h1>
 
-    <p className="text-sm text-gray-400 mb-4 text-center">
-      {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
-    </p>
+      <p className="text-sm text-gray-400 mb-4 text-center">
+        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
+      </p>
 
-    {/* WRAPPER / CARD */}
-    <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#333] overflow-hidden">
+      <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#333] overflow-hidden">
 
-      {/* SELECT ALL HEADER */}
-      <div className="flex justify-between p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
-        <div className="text-xs text-red-500">ALWAYS RE-CHECK TO BURN</div>
-        <button
-          onClick={() =>
-            selected.length === tokens.length
-              ? setSelected([])                     // Unselect All
-              : setSelected(tokens.map(t => t.address)) // Select All
-          }
-          className="text-xs text-[#3b82f6] hover:text-[#5ea1ff] transition"
-        >
-          {selected.length === tokens.length ? "Unselect All" : "Select All"}
-        </button>
-      </div>
-
-      {/* TOKEN LIST (SCROLL AREA) */}
-<div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
-  {tokens.map((t) => {
-    const active = selected.includes(t.address);
-    return (
-      <button
-        key={t.address}
-        onClick={() =>
-          setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
-        }
-        className={`flex items-center w-full px-4 py-3 hover:bg-[#1a1a1a] transition ${
-          active ? "bg-[#193c29]" : ""
-        }`}
-      >
-        <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
-
-        <div className="flex-1 overflow-hidden">
-          <div className="font-medium truncate">{t.name}</div>
-
-          {/* ✅ FIX HERE: parseFloat instead of toFixed error */}
-          <div className="text-xs text-gray-400 truncate">
-            {t.symbol} • {parseFloat(t.balance).toFixed(4)}
-          </div>
+        <div className="flex justify-between p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
+          <div className="text-xs text-red-500">ALWAYS RE-CHECK TO BURN</div>
+          <button
+            onClick={() =>
+              selected.length === tokens.length
+                ? setSelected([])
+                : setSelected(tokens.map((t) => t.address))
+            }
+            className="text-xs text-[#3b82f6] hover:text-[#5ea1ff] transition"
+          >
+            {selected.length === tokens.length ? "Unselect All" : "Select All"}
+          </button>
         </div>
 
-        <div className="text-sm text-gray-300 shrink-0">
-          {t.price ? `$${t.price}` : "-"}
+        <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
+          {tokens.map((t) => {
+            const active = selected.includes(t.address);
+            return (
+              <button
+                key={t.address}
+                onClick={() =>
+                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
+                }
+                className={`flex items-center w-full px-4 py-3 hover:bg-[#1a1a1a] transition ${
+                  active ? "bg-[#193c29]" : ""
+                }`}
+              >
+                <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
+                <div className="flex-1 overflow-hidden">
+                  <div className="font-medium truncate">{t.name}</div>
+                  <div className="text-xs text-gray-400 truncate">
+                    {t.symbol} • {Number(t.balance).toFixed(4)}
+                  </div>
+                </div>
+                <div className="text-sm text-gray-300 shrink-0">
+                  {t.price ? `$${t.price}` : "-"}
+                </div>
+                <div className="ml-3 w-5 h-5 rounded border border-gray-500 flex items-center justify-center">
+                  {active && <div className="w-3 h-3 rounded bg-[#2ecc71]" />}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="ml-3 w-5 h-5 rounded border border-gray-500 flex items-center justify-center">
-          {active && <div className="w-3 h-3 rounded bg-[#2ecc71]" />}
-        </div>
-      </button>
-    );
-  })}
-</div>
-
-
-      {/* BOTTOM BUTTON PANEL */}
-      <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-3">
-
-        {/* 🔥 Burn Button */}
-        <button
+        <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-3">
+          <button
             onClick={burn}
             className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold"
           >
-             Burn {selected.length > 0 && `(${selected.length})`}
+            Burn {selected.length > 0 && `(${selected.length})`}
           </button>
 
-
-        {/* 🔍 Scan / Reload Button */}
-        <button
-          onClick={loadTokens}
-          className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold transition"
-        >
-           Scan / Refresh Tokens
-        </button>
+          <button
+            onClick={loadTokens}
+            className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold transition"
+          >
+            Scan / Refresh Tokens
+          </button>
+        </div>
       </div>
+
+      {lastBurnTx && (
+        <button
+          onClick={shareWarpcast}
+          className="mt-4 w-full max-w-sm py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold transition"
+        >
+          📣 Share on Feed
+        </button>
+      )}
+
+      <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
     </div>
-
-    {/* SHARE BUTTON */}
-    {lastBurnTx && (
-      <button
-        onClick={shareWarpcast}
-        className="mt-4 w-full max-w-sm py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold transition"
-      >
-        📣 Share on Feed
-      </button>
-    )}
-
-    <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
-  </div>
-);
+  );
 }
