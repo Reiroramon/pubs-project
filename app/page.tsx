@@ -178,34 +178,42 @@ export default function HomePage() {
       </div>
 
       {/* TOKEN LIST (SCROLL AREA) */}
-      <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
-        {tokens.map((t) => {
-          const active = selected.includes(t.address);
-          return (
-            <button
-              key={t.address}
-              onClick={() =>
-                setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
-              }
-              className={`flex items-center w-full px-4 py-3 hover:bg-[#1a1a1a] transition ${
-                active ? "bg-[#193c29]" : ""
-              }`}
-            >
-              <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
-              <div className="flex-1 overflow-hidden">
-                <div className="font-medium truncate">{t.name}</div>
-                <div className="text-xs text-gray-400 truncate">
-                  {t.symbol} • {t.balance.toFixed(4)}
-                </div>
-              </div>
-              <div className="text-sm text-gray-300 shrink-0">${t.price ?? "-"}</div>
-              <div className="ml-3 w-5 h-5 rounded border border-gray-500 flex items-center justify-center">
-                {active && <div className="w-3 h-3 rounded bg-[#2ecc71]" />}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+<div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
+  {tokens.map((t) => {
+    const active = selected.includes(t.address);
+    return (
+      <button
+        key={t.address}
+        onClick={() =>
+          setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
+        }
+        className={`flex items-center w-full px-4 py-3 hover:bg-[#1a1a1a] transition ${
+          active ? "bg-[#193c29]" : ""
+        }`}
+      >
+        <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
+
+        <div className="flex-1 overflow-hidden">
+          <div className="font-medium truncate">{t.name}</div>
+
+          {/* ✅ FIX HERE: parseFloat instead of toFixed error */}
+          <div className="text-xs text-gray-400 truncate">
+            {t.symbol} • {parseFloat(t.balance).toFixed(4)}
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-300 shrink-0">
+          {t.price ? `$${t.price}` : "-"}
+        </div>
+
+        <div className="ml-3 w-5 h-5 rounded border border-gray-500 flex items-center justify-center">
+          {active && <div className="w-3 h-3 rounded bg-[#2ecc71]" />}
+        </div>
+      </button>
+    );
+  })}
+</div>
+
 
       {/* BOTTOM BUTTON PANEL */}
       <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-3">
