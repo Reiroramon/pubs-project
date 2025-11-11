@@ -4,7 +4,7 @@
     "name": "PUBS BURN",
     "homeUrl": "https://pubs-burn.vercel.app",
     "iconUrl": "https://pubs-burn.vercel.app/icon.png",
-    "splashImageUrl": "https://pubs-burn.vercel.app/icon.png",
+    "splashImageUrl": "https://pubs-burn.vercel.app/splash.png",
     "splashBackgroundColor": "#0A0A0A",
     "requiredChains": ["eip155:8453"],
     "requiredCapabilities": [
