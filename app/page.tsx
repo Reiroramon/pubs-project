@@ -87,13 +87,11 @@ export default function HomePage() {
 
       setStatus("🔥 Preparing burn...");
 
-      // ✅ Provider langsung ke wallet Farcaster (tidak pakai wagmi transport lagi)
       const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
 
-      const txs = [];
-
+      const calls = [];
       for (const tokenAddress of selected) {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
@@ -101,7 +99,7 @@ export default function HomePage() {
         const amountWei = ethers.parseUnits(row.balance.toString(), row.decimals);
         const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
 
-        txs.push({
+        calls.push({
           to: CONTRACT,
           value: feeWei,
           data: contract.interface.encodeFunctionData("burnToken", [
@@ -112,10 +110,9 @@ export default function HomePage() {
         });
       }
 
-      // ✅ Batch send (miniapp native EIP-5792)
       const res = await (sdk as any).wallet.ethProvider.request({
         method: "wallet_sendCalls",
-        params: [{ calls: txs }],
+        params: [{ calls }],
       });
 
       setLastBurnTx(res?.transactionHash || res?.hash || null);
@@ -135,11 +132,11 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#111] text-gray-100 p-6">
-      <h1 className="text-4xl font-bold mb-6 text-center">PUBS BURN</h1>
+    <div className="min-h-screen bg-[#111] text-gray-100 p-6 overflow-x-hidden">
 
+      <h1 className="text-4xl font-bold mb-6 text-center">PUBS BURN</h1>
       {isConnected ? (
-        <p className="text-center text-gray-400 mb-4">Wallet: {address}</p>
+        <p className="text-center text-gray-400 mb-4">{address}</p>
       ) : (
         <p className="text-center">Connecting wallet...</p>
       )}
@@ -151,7 +148,8 @@ export default function HomePage() {
         🔄 Load Tokens
       </button>
 
-      <div className="max-h-[420px] overflow-y-auto divide-y divide-[#222] border border-[#333] rounded-xl">
+      {/* LIST */}
+      <div className="max-h-[420px] overflow-y-auto overflow-x-hidden divide-y divide-[#222] border border-[#333] rounded-xl">
         {tokens.map((t) => {
           const active = selected.includes(t.address);
           return (
@@ -162,19 +160,19 @@ export default function HomePage() {
                   active ? selected.filter((x) => x !== t.address) : [...selected, t.address]
                 )
               }
-              className={`flex items-center w-full px-4 py-3 text-left hover:bg-[#1a1a1a] transition ${
+              className={`flex items-center w-full px-4 py-3 text-left hover:bg-[#1a1a1a] transition max-w-full overflow-hidden ${
                 active ? "bg-[#193c29]" : ""
               }`}
             >
-              <img src={t.logoUrl} className="w-8 h-8 rounded-full mr-3" />
-              <div className="flex-1">
-                <div className="font-medium">{t.name}</div>
-                <div className="text-xs text-gray-400">
+              <img src={t.logoUrl} className="w-8 h-8 rounded-full mr-3 shrink-0" />
+              <div className="flex-1 overflow-hidden">
+                <div className="font-medium truncate">{t.name}</div>
+                <div className="text-xs text-gray-400 truncate">
                   {t.symbol} • {t.balance.toFixed(4)}
                 </div>
               </div>
-              <div className="text-sm text-gray-300">${t.price ?? "-"}</div>
-              <div className="ml-3 w-5 h-5 rounded border border-gray-500">
+              <div className="text-sm text-gray-300 shrink-0">${t.price ?? "-"}</div>
+              <div className="ml-3 w-5 h-5 rounded border border-gray-500 shrink-0">
                 {active && <div className="w-full h-full bg-[#2ecc71] rounded" />}
               </div>
             </button>
