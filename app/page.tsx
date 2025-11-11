@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { useAccount } from "wagmi";
-import { encodeFunctionData } from "viem";
 import { ethers } from "ethers";
 
 const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
@@ -14,7 +13,6 @@ const ABI = [
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
-
   const [status, setStatus] = useState("");
   const [tokens, setTokens] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -25,9 +23,18 @@ export default function HomePage() {
   }, []);
 
   const loadTokens = async () => {
-    setStatus("Loading wallet tokens...");
+    if (!address) {
+      setStatus("⚠️ Wallet belum terhubung");
+      return;
+    }
+
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
-    if (!address || !key) return;
+    if (!key) {
+      setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum di isi");
+      return;
+    }
+
+    setStatus("⏳ Loading wallet tokens...");
 
     const result = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
       method: "POST",
@@ -82,9 +89,10 @@ export default function HomePage() {
   };
 
   const burn = async () => {
-    try {
-      if (!selected.length) return setStatus("Pilih token dulu.");
+    if (!address) return setStatus("⚠️ Wallet belum terhubung");
+    if (!selected.length) return setStatus("Pilih token dulu.");
 
+    try {
       setStatus("🔥 Preparing burn...");
 
       const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
@@ -92,6 +100,7 @@ export default function HomePage() {
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
 
       const calls = [];
+
       for (const tokenAddress of selected) {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
@@ -132,39 +141,35 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#111] text-gray-100 p-6 overflow-x-hidden">
+    <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-6 flex flex-col items-center overflow-hidden">
 
-      <h1 className="text-4xl font-bold mb-6 text-center">PUBS BURN</h1>
-      {isConnected ? (
-        <p className="text-center text-gray-400 mb-4">{address}</p>
-      ) : (
-        <p className="text-center">Connecting wallet...</p>
-      )}
+      <h1 className="text-3xl font-bold mb-3 text-center">PUBS BURN</h1>
+
+      <p className="text-sm text-gray-400 mb-4 text-center">
+        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
+      </p>
 
       <button
         onClick={loadTokens}
-        className="w-full bg-[#3b82f6] py-3 rounded-lg mb-4 font-semibold hover:bg-[#5ea1ff]"
+        className="w-full max-w-sm bg-[#3b82f6] py-3 rounded-lg mb-4 font-semibold hover:bg-[#5ea1ff] transition"
       >
         🔄 Load Tokens
       </button>
 
-      {/* LIST */}
-      <div className="max-h-[420px] overflow-y-auto overflow-x-hidden divide-y divide-[#222] border border-[#333] rounded-xl">
+      <div className="w-full max-w-sm flex-1 min-h-[260px] max-h-[420px] overflow-y-auto rounded-xl border border-[#333] divide-y divide-[#222]">
         {tokens.map((t) => {
           const active = selected.includes(t.address);
           return (
             <button
               key={t.address}
               onClick={() =>
-                setSelected(
-                  active ? selected.filter((x) => x !== t.address) : [...selected, t.address]
-                )
+                setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
               }
-              className={`flex items-center w-full px-4 py-3 text-left hover:bg-[#1a1a1a] transition max-w-full overflow-hidden ${
+              className={`flex items-center w-full px-4 py-3 text-left hover:bg-[#1a1a1a] transition ${
                 active ? "bg-[#193c29]" : ""
               }`}
             >
-              <img src={t.logoUrl} className="w-8 h-8 rounded-full mr-3 shrink-0" />
+              <img src={t.logoUrl} className="w-8 h-8 rounded-full mr-3" />
               <div className="flex-1 overflow-hidden">
                 <div className="font-medium truncate">{t.name}</div>
                 <div className="text-xs text-gray-400 truncate">
@@ -172,8 +177,8 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="text-sm text-gray-300 shrink-0">${t.price ?? "-"}</div>
-              <div className="ml-3 w-5 h-5 rounded border border-gray-500 shrink-0">
-                {active && <div className="w-full h-full bg-[#2ecc71] rounded" />}
+              <div className="ml-3 w-5 h-5 rounded border border-gray-500 flex items-center justify-center shrink-0">
+                {active && <div className="w-3 h-3 rounded bg-[#2ecc71]" />}
               </div>
             </button>
           );
@@ -182,7 +187,7 @@ export default function HomePage() {
 
       <button
         onClick={burn}
-        className="mt-5 w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold"
+        className="mt-5 w-full max-w-sm py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold transition"
       >
         🔥 Burn Selected
       </button>
@@ -190,7 +195,7 @@ export default function HomePage() {
       {lastBurnTx && (
         <button
           onClick={shareWarpcast}
-          className="mt-4 w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold"
+          className="mt-3 w-full max-w-sm py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold transition"
         >
           📣 Share on Warpcast
         </button>
@@ -200,3 +205,4 @@ export default function HomePage() {
     </div>
   );
 }
+
