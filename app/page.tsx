@@ -83,8 +83,8 @@ export default function HomePage() {
   };
 
   const burn = async () => {
-    if (!address) return setStatus("⚠️ Wallet belum terhubung");
-    if (!selected.length) return setStatus("Pilih token dulu.");
+    if (!address) return setStatus("⚠️ Wallet Not Connected");
+    if (!selected.length) return setStatus("Select To Burn");
 
     try {
       setStatus("🔥 Preparing burn...");
