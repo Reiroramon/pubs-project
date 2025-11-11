@@ -67,6 +67,7 @@ export default function HomePage() {
 
         const { decimals, name, symbol, logo } = meta?.result ?? {};
         const decimalsSafe = decimals ?? 18;
+
         const balanceString = ethers.formatUnits(t.tokenBalance, decimalsSafe);
 
         const priceRes = await fetch(
@@ -81,7 +82,7 @@ export default function HomePage() {
         return {
           address: t.contractAddress,
           name: name || symbol || "Unknown",
-          symbol,
+          symbol: symbol || "TKN",
           decimals: decimalsSafe,
           balance: balanceString,
           rawBalance: BigInt(t.tokenBalance),
@@ -165,25 +166,25 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-gray-100 px-4 py-6 flex flex-col items-center overflow-hidden">
+    <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
 
-      <h1 className="text-3xl font-bold mb-2 text-center text-[#39FF14]">PUBS BURN</h1>
+      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
 
       <p className="text-sm text-gray-400 mb-4 text-center">
         {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
 
-      <div className="w-full max-w-sm flex flex-col bg-[#0f0f0f] rounded-xl border border-[#1a1a1a] overflow-hidden">
+      <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
 
-        <div className="flex justify-between p-2 border-b border-[#222] bg-[#0c0c0c] sticky top-0 z-10">
-          <div className="text-xs text-[#ff4444]">ALWAYS VERIFY BEFORE BURN</div>
+        <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111] sticky top-0 z-10">
+          <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN</div>
           <button
             onClick={() =>
               selected.length === tokens.length
                 ? setSelected([])
                 : setSelected(tokens.map((t) => t.address))
             }
-            className="text-xs text-[#39FF14]"
+            className="text-xs text-[#00FF3C]"
           >
             {selected.length === tokens.length ? "Unselect All" : "Select All"}
           </button>
@@ -199,8 +200,8 @@ export default function HomePage() {
                 onClick={() =>
                   setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
                 }
-                className={`flex items-center w-full px-4 py-3 hover:bg-[#131913] transition ${
-                  active ? "bg-[#102b14]" : ""
+                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${
+                  active ? "bg-[#132A18]" : ""
                 }`}
               >
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
@@ -208,38 +209,37 @@ export default function HomePage() {
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
-                    {t.isScam && <span className="text-[10px] text-red-400">🚨 SCAM</span>}
+                    {t.isScam && <span className="text-[10px] text-[#FF4A4A]">🚨 SCAM</span>}
                   </div>
                   <div className="text-xs text-gray-400 truncate">
                     {t.symbol} • {Number(t.balance).toFixed(4)}
                   </div>
                 </div>
 
-                <div className={`text-sm ${t.isScam ? "text-red-400" : "text-[#39FF14]"}`}>
+                <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
                   {t.price ? `$${t.price}` : "0.00"}
                 </div>
 
-                <div className="ml-3 w-5 h-5 rounded border border-[#39FF14] flex items-center justify-center">
-                  {active && <div className="w-3 h-3 rounded bg-[#39FF14]" />}
+                <div className="ml-3 w-5 h-5 rounded border border-[#00FF3C] flex items-center justify-center">
+                  {active && <div className="w-3 h-3 rounded bg-[#00FF3C]" />}
                 </div>
               </button>
             );
           })}
         </div>
 
-        <div className="p-3 border-t border-[#222] bg-[#0c0c0c] flex flex-col gap-3">
+        <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
 
           <button
             onClick={burn}
-            className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold"
+            className="w-full py-3 bg-[#00FF3C] hover:bg-[#32FF67] text-black rounded-xl font-bold"
           >
             Burn {selected.length > 0 && `(${selected.length})`}
           </button>
 
           <button
             onClick={loadTokens}
-            className="w-full py-3 rounded-xl font-semibold text-black"
-            style={{ backgroundColor: "#39FF14" }}
+            className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]"
           >
             Scan / Refresh Tokens
           </button>
@@ -249,7 +249,7 @@ export default function HomePage() {
       {lastBurnTx && (
         <button
           onClick={shareWarpcast}
-          className="mt-4 w-full max-w-sm py-3 bg-[#39FF14] hover:bg-[#2ED80C] rounded-xl font-semibold text-black"
+          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black"
         >
           📣 Share on Feed
         </button>
