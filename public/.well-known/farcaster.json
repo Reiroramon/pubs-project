@@ -14,7 +14,8 @@
     "requiredChains": ["eip155:8453"],
     "requiredCapabilities": [
       "wallet.getEthereumProvider",
-      "actions.signIn"
+      "actions.signIn",
+      "wallet_sendCalls"
     ]
   }
 }
