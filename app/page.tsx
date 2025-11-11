@@ -163,7 +163,7 @@ export default function HomePage() {
 
       {/* SELECT ALL HEADER */}
       <div className="flex justify-between p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
-        <div className="text-xs text-red-500">ALWAYS RECHECK TO BURN</div>
+        <div className="text-xs text-red-500">ALWAYS RE-CHECK TO BURN</div>
         <button
           onClick={() =>
             selected.length === tokens.length
@@ -211,11 +211,12 @@ export default function HomePage() {
 
         {/* 🔥 Burn Button */}
         <button
-          onClick={burn}
-          className="w-full py-3 bSg-red-600 hover:bg-red-500 rounded-xl font-bold transition"
-        >
-           Burn  {selected.length > 0 && `(${selected.length})`}
-        </button>
+            onClick={burn}
+            className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold"
+          >
+             Burn {selected.length > 0 && `(${selected.length})`}
+          </button>
+
 
         {/* 🔍 Scan / Reload Button */}
         <button
