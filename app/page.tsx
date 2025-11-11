@@ -209,7 +209,7 @@ export default function HomePage() {
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
-                    {t.isScam && <span className="text-[10px] text-[#FF4A4A]">🚨 SCAM</span>}
+                    {t.isScam && <span className="text-[10px] text-[#FF4A4A]">🚨</span>}
                   </div>
                   <div className="text-xs text-gray-400 truncate">
                     {t.symbol} • {Number(t.balance).toFixed(4)}
