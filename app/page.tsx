@@ -77,15 +77,18 @@ export default function HomePage() {
         const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
         const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
 
+        const isScam = !price || Number(price) === 0;
+
         return {
           address: t.contractAddress,
           name: name || symbol || "Unknown",
           symbol: symbol || "TKN",
           decimals: decimalsSafe,
           balance: balanceString,
-          rawBalance: BigInt(t.tokenBalance), // ✅ Correct BigInt raw value
+          rawBalance: BigInt(t.tokenBalance),
           logoUrl,
           price,
+          isScam, // ✅ add scam flag
         };
       })
     );
@@ -94,12 +97,11 @@ export default function HomePage() {
     setStatus("Ready to burn");
   };
 
-  // ✅ FINAL BURN WITH AUTOMATIC APPROVE
   const burn = async () => {
     if (!selected.length) return setStatus("Select token to burn.");
 
     try {
-      setStatus("🔥 Approving + Burning...");
+      setStatus("🔥 Approving & Burning...");
 
       const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
@@ -111,20 +113,25 @@ export default function HomePage() {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
-        const amountWei = row.rawBalance; // ✅ exact BigInt
+        const amountWei = row.rawBalance;
+        if (amountWei === 0n) continue;
+
         const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
 
-        // 1) ✅ Approve burn contract to spend token
         calls.push({
           to: row.address,
           value: 0,
           data: tokenContract.interface.encodeFunctionData("approve", [CONTRACT, amountWei]),
         });
 
-        // 2) ✅ Get fee for the burn
-        const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
+        let feeWei;
+        try {
+          [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
+        } catch {
+          console.log("⛔ Skip incompatible token:", row.address);
+          continue;
+        }
 
-        // 3) ✅ Burn call
         calls.push({
           to: CONTRACT,
           value: feeWei,
@@ -172,14 +179,14 @@ export default function HomePage() {
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#333] overflow-hidden">
 
         <div className="flex justify-between p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
-          <div className="text-xs text-red-500">ALWAYS RE-CHECK TO BURN</div>
+          <div className="text-xs text-red-500">ALWAYS VERIFY BEFORE BURN</div>
           <button
             onClick={() =>
               selected.length === tokens.length
                 ? setSelected([])
                 : setSelected(tokens.map((t) => t.address))
             }
-            className="text-xs text-[#3b82f6] hover:text-[#5ea1ff] transition"
+            className="text-xs text-[#3b82f6]"
           >
             {selected.length === tokens.length ? "Unselect All" : "Select All"}
           </button>
@@ -188,6 +195,7 @@ export default function HomePage() {
         <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
           {tokens.map((t) => {
             const active = selected.includes(t.address);
+
             return (
               <button
                 key={t.address}
@@ -199,15 +207,21 @@ export default function HomePage() {
                 }`}
               >
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
+
                 <div className="flex-1 overflow-hidden">
-                  <div className="font-medium truncate">{t.name}</div>
+                  <div className="font-medium truncate flex items-center gap-1">
+                    {t.name}
+                    {t.isScam && <span className="text-[10px] text-red-400">🚨 SCAM</span>}
+                  </div>
                   <div className="text-xs text-gray-400 truncate">
                     {t.symbol} • {Number(t.balance).toFixed(4)}
                   </div>
                 </div>
-                <div className="text-sm text-gray-300 shrink-0">
-                  {t.price ? `$${t.price}` : "-"}
+
+                <div className={`text-sm ${t.isScam ? "text-red-400" : "text-gray-300"}`}>
+                  {t.price ? `$${t.price}` : "0.00"}
                 </div>
+
                 <div className="ml-3 w-5 h-5 rounded border border-gray-500 flex items-center justify-center">
                   {active && <div className="w-3 h-3 rounded bg-[#2ecc71]" />}
                 </div>
@@ -220,17 +234,19 @@ export default function HomePage() {
           <button onClick={burn} className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold">
             Burn {selected.length > 0 && `(${selected.length})`}
           </button>
-          <button onClick={loadTokens} className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold transition">
+          <button
+            onClick={loadTokens}
+            className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold"
+          >
             Scan / Refresh Tokens
           </button>
         </div>
-
       </div>
 
       {lastBurnTx && (
         <button
           onClick={shareWarpcast}
-          className="mt-4 w-full max-w-sm py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold transition"
+          className="mt-4 w-full max-w-sm py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold"
         >
           📣 Share on Feed
         </button>
