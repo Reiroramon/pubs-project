@@ -69,7 +69,8 @@ export default function HomePage() {
         }).then((r) => r.json());
 
         const { decimals, name, symbol, logo } = meta?.result ?? {};
-        const balance = Number(ethers.formatUnits(t.tokenBalance, decimals ?? 18));
+       const balance = ethers.formatUnits(t.tokenBalance, decimals ?? 18); // <-- simpan string
+
 
         const priceRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${t.contractAddress}`)
           .then((r) => r.json())
@@ -111,9 +112,9 @@ export default function HomePage() {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
-        const amountWei = ethers.parseUnits(row.balance.toString(), row.decimals);
-        const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
-
+       const amountWei = ethers.parseUnits(row.balance, row.decimals);
+       const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
+       
         calls.push({
           to: CONTRACT,
           value: feeWei,
