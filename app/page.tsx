@@ -150,68 +150,94 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-5 flex flex-col items-center overflow-hidden">
+  <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-6 flex flex-col items-center overflow-hidden">
 
-      <h1 className="text-3xl font-bold text-center mb-2">PUBS BURN</h1>
-      <p className="text-sm text-gray-400 mb-3">
-        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting..."}
-      </p>
+    <h1 className="text-3xl font-bold mb-2 text-center">PUBS BURN</h1>
 
-      <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#333] overflow-hidden">
+    <p className="text-sm text-gray-400 mb-4 text-center">
+      {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
+    </p>
 
-        {/* Select All */}
-        <div className="flex justify-end p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
-          <button
-            onClick={() =>
-              selected.length === tokens.length ? setSelected([]) : setSelected(tokens.map(t => t.address))
-            }
-            className="text-sm text-[#3b82f6]"
-          >
-            {selected.length === tokens.length ? "Unselect All" : "Select All"}
-          </button>
-        </div>
+    {/* WRAPPER / CARD */}
+    <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#333] overflow-hidden">
 
-        {/* List */}
-        <div className="flex-1 max-h-[380px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
-          {tokens.map((t) => {
-            const active = selected.includes(t.address);
-            return (
-              <button
-                key={t.address}
-                onClick={() =>
-                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
-                }
-                className={`flex items-center px-4 py-3 text-left hover:bg-[#1a1a1a] ${
-                  active ? "bg-[#193c29]" : ""
-                }`}
-              >
-                <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
-                <div className="flex-1 overflow-hidden">
-                  <div className="font-medium truncate">{t.name}</div>
-                  <div className="text-xs text-gray-400 truncate">{t.symbol} • {t.balance.toFixed(4)}</div>
-                </div>
-                <div className="text-sm text-gray-300">${t.price ?? "-"}</div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Buttons */}
-        <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-2">
-          <button onClick={burn} className="py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold">
-            🔥 Burn Selected {selected.length > 0 && `(${selected.length})`}
-          </button>
-        </div>
+      {/* SELECT ALL HEADER */}
+      <div className="flex justify-between p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
+        <div className="text-xs text-gray-500">Token in Wallet</div>
+        <button
+          onClick={() =>
+            selected.length === tokens.length
+              ? setSelected([])                     // Unselect All
+              : setSelected(tokens.map(t => t.address)) // Select All
+          }
+          className="text-xs text-[#3b82f6] hover:text-[#5ea1ff] transition"
+        >
+          {selected.length === tokens.length ? "Unselect All" : "Select All"}
+        </button>
       </div>
 
-      {lastBurnTx && (
-        <button onClick={shareWarpcast} className="mt-3 w-full max-w-sm py-3 bg-purple-600 rounded-xl">
-          📣 Share on Warpcast
+      {/* TOKEN LIST (SCROLL AREA) */}
+      <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
+        {tokens.map((t) => {
+          const active = selected.includes(t.address);
+          return (
+            <button
+              key={t.address}
+              onClick={() =>
+                setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
+              }
+              className={`flex items-center w-full px-4 py-3 hover:bg-[#1a1a1a] transition ${
+                active ? "bg-[#193c29]" : ""
+              }`}
+            >
+              <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
+              <div className="flex-1 overflow-hidden">
+                <div className="font-medium truncate">{t.name}</div>
+                <div className="text-xs text-gray-400 truncate">
+                  {t.symbol} • {t.balance.toFixed(4)}
+                </div>
+              </div>
+              <div className="text-sm text-gray-300 shrink-0">${t.price ?? "-"}</div>
+              <div className="ml-3 w-5 h-5 rounded border border-gray-500 flex items-center justify-center">
+                {active && <div className="w-3 h-3 rounded bg-[#2ecc71]" />}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* BOTTOM BUTTON PANEL */}
+      <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-3">
+
+        {/* 🔥 Burn Button */}
+        <button
+          onClick={burn}
+          className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold transition"
+        >
+          🔥 Burn Selected {selected.length > 0 && `(${selected.length})`}
         </button>
-      )}
 
-      <p className="text-center text-sm text-gray-400 mt-3">{status}</p>
+        {/* 🔍 Scan / Reload Button */}
+        <button
+          onClick={loadTokens}
+          className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold transition"
+        >
+          🔄 Scan / Refresh Tokens
+        </button>
+      </div>
     </div>
-  );
-}
 
+    {/* SHARE BUTTON */}
+    {lastBurnTx && (
+      <button
+        onClick={shareWarpcast}
+        className="mt-4 w-full max-w-sm py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold transition"
+      >
+        📣 Share on Warpcast
+      </button>
+    )}
+
+    <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
+  </div>
+);
+}
