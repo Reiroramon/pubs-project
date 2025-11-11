@@ -91,7 +91,7 @@ export default function HomePage() {
     );
 
     setTokens(final.filter((t) => t.balance > 0));
-    setStatus("✅ Tokens Ready ✅");
+    setStatus("Ready to burn");
   };
 
 
@@ -163,7 +163,7 @@ export default function HomePage() {
 
       {/* SELECT ALL HEADER */}
       <div className="flex justify-between p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
-        <div className="text-xs text-gray-500">Token in Wallet</div>
+        <div className="text-xs text-red-500">ALWAYS RECHECK TO BURN</div>
         <button
           onClick={() =>
             selected.length === tokens.length
@@ -212,9 +212,9 @@ export default function HomePage() {
         {/* 🔥 Burn Button */}
         <button
           onClick={burn}
-          className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold transition"
+          className="w-full py-3 bSg-red-600 hover:bg-red-500 rounded-xl font-bold transition"
         >
-          🔥 Burn Selected {selected.length > 0 && `(${selected.length})`}
+           Burn  {selected.length > 0 && `(${selected.length})`}
         </button>
 
         {/* 🔍 Scan / Reload Button */}
@@ -222,7 +222,7 @@ export default function HomePage() {
           onClick={loadTokens}
           className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold transition"
         >
-          🔄 Scan / Refresh Tokens
+           Scan / Refresh Tokens
         </button>
       </div>
     </div>
@@ -233,7 +233,7 @@ export default function HomePage() {
         onClick={shareWarpcast}
         className="mt-4 w-full max-w-sm py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold transition"
       >
-        📣 Share on Warpcast
+        📣 Share on Feed
       </button>
     )}
 
