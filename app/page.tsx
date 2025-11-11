@@ -16,6 +16,7 @@ const ERC20_ABI = [
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
+
   const [status, setStatus] = useState("");
   const [tokens, setTokens] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -75,28 +76,31 @@ export default function HomePage() {
         const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
         const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
 
+        const isScam = !price || Number(price) === 0;
+
         return {
           address: t.contractAddress,
           name: name || symbol || "Unknown",
-          symbol: symbol || "TKN",
+          symbol,
           decimals: decimalsSafe,
           balance: balanceString,
           rawBalance: BigInt(t.tokenBalance),
           logoUrl,
           price,
+          isScam,
         };
       })
     );
 
     setTokens(final.filter((t) => Number(t.balance) > 0));
-    setStatus("Ready");
+    setStatus("Ready to burn");
   };
 
   const burn = async () => {
     if (!selected.length) return setStatus("Select token to burn.");
 
     try {
-      setStatus("🔥 Approving + Burning...");
+      setStatus("🔥 Approving & Burning...");
 
       const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
@@ -109,6 +113,8 @@ export default function HomePage() {
         if (!row) continue;
 
         const amountWei = row.rawBalance;
+        if (amountWei === 0n) continue;
+
         const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
 
         calls.push({
@@ -117,7 +123,12 @@ export default function HomePage() {
           data: tokenContract.interface.encodeFunctionData("approve", [CONTRACT, amountWei]),
         });
 
-        const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
+        let feeWei;
+        try {
+          [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
+        } catch {
+          continue;
+        }
 
         calls.push({
           to: CONTRACT,
@@ -139,7 +150,6 @@ export default function HomePage() {
       setStatus("✅ Burn Success!");
       setSelected([]);
       loadTokens();
-
     } catch (e: any) {
       setStatus("❌ " + e.message);
     }
@@ -149,28 +159,31 @@ export default function HomePage() {
     if (!lastBurnTx) return;
     sdk.actions.openUrl(
       `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        "I just cleaned my wallet using PUBS BURN ♻️🔥 #SafeOnchain"
+        "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
       )}`
     );
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-gray-100 px-4 py-6 flex flex-col items-center">
+    <div className="min-h-screen bg-[#0A0A0A] text-gray-100 px-4 py-6 flex flex-col items-center overflow-hidden">
 
-      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
+      <h1 className="text-3xl font-bold mb-2 text-center text-[#39FF14]">PUBS BURN</h1>
+
       <p className="text-sm text-gray-400 mb-4 text-center">
         {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
 
-      <div className="w-full max-w-sm flex flex-col bg-[#111] rounded-xl border border-[#00FF3C30] overflow-hidden">
+      <div className="w-full max-w-sm flex flex-col bg-[#0f0f0f] rounded-xl border border-[#1a1a1a] overflow-hidden">
 
-        <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#0D0D0D] sticky top-0 z-10">
-          <div className="text-xs text-[#FF4A4A] font-medium">ALWAYS VERIFY BEFORE BURN</div>
+        <div className="flex justify-between p-2 border-b border-[#222] bg-[#0c0c0c] sticky top-0 z-10">
+          <div className="text-xs text-[#ff4444]">ALWAYS VERIFY BEFORE BURN</div>
           <button
             onClick={() =>
-              selected.length === tokens.length ? setSelected([]) : setSelected(tokens.map(t => t.address))
+              selected.length === tokens.length
+                ? setSelected([])
+                : setSelected(tokens.map((t) => t.address))
             }
-            className="text-xs text-[#00FF3C] hover:text-[#32FF67] transition"
+            className="text-xs text-[#39FF14]"
           >
             {selected.length === tokens.length ? "Unselect All" : "Select All"}
           </button>
@@ -179,49 +192,64 @@ export default function HomePage() {
         <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
           {tokens.map((t) => {
             const active = selected.includes(t.address);
+
             return (
               <button
                 key={t.address}
                 onClick={() =>
                   setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
                 }
-                className={`flex items-center w-full px-4 py-3 transition ${
-                  active ? "bg-[#0F2515]" : "hover:bg-[#1a1a1a]"
+                className={`flex items-center w-full px-4 py-3 hover:bg-[#131913] transition ${
+                  active ? "bg-[#102b14]" : ""
                 }`}
               >
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
+
                 <div className="flex-1 overflow-hidden">
-                  <div className="font-medium truncate">{t.name}</div>
-                  <div className="text-xs text-gray-500 truncate">
+                  <div className="font-medium truncate flex items-center gap-1">
+                    {t.name}
+                    {t.isScam && <span className="text-[10px] text-red-400">🚨 SCAM</span>}
+                  </div>
+                  <div className="text-xs text-gray-400 truncate">
                     {t.symbol} • {Number(t.balance).toFixed(4)}
                   </div>
                 </div>
-                <div className="text-sm text-gray-300 shrink-0">
-                  {t.price ? `$${t.price}` : "-"}
+
+                <div className={`text-sm ${t.isScam ? "text-red-400" : "text-[#39FF14]"}`}>
+                  {t.price ? `$${t.price}` : "0.00"}
                 </div>
-                <div className="ml-3 w-5 h-5 rounded border border-[#00FF3C] flex items-center justify-center">
-                  {active && <div className="w-3 h-3 rounded bg-[#00FF3C]" />}
+
+                <div className="ml-3 w-5 h-5 rounded border border-[#39FF14] flex items-center justify-center">
+                  {active && <div className="w-3 h-3 rounded bg-[#39FF14]" />}
                 </div>
               </button>
             );
           })}
         </div>
 
-        <div className="p-3 border-t border-[#00FF3C30] bg-[#0D0D0D] flex flex-col gap-3">
-          <button onClick={burn} className="w-full py-3 bg-[#00FF3C] hover:bg-[#32FF67] text-black font-bold rounded-xl">
+        <div className="p-3 border-t border-[#222] bg-[#0c0c0c] flex flex-col gap-3">
+
+          <button
+            onClick={burn}
+            className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold"
+          >
             Burn {selected.length > 0 && `(${selected.length})`}
           </button>
-          <button onClick={loadTokens} className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold">
+
+          <button
+            onClick={loadTokens}
+            className="w-full py-3 rounded-xl font-semibold text-black"
+            style={{ backgroundColor: "#39FF14" }}
+          >
             Scan / Refresh Tokens
           </button>
         </div>
-
       </div>
 
       {lastBurnTx && (
         <button
           onClick={shareWarpcast}
-          className="mt-4 w-full max-w-sm py-3 bg-[#0050FF] hover:bg-[#3270FF] rounded-xl font-semibold transition"
+          className="mt-4 w-full max-w-sm py-3 bg-[#39FF14] hover:bg-[#2ED80C] rounded-xl font-semibold text-black"
         >
           📣 Share on Feed
         </button>
