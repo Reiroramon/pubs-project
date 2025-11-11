@@ -13,6 +13,7 @@ const ABI = [
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
+
   const [status, setStatus] = useState("");
   const [tokens, setTokens] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -22,13 +23,24 @@ export default function HomePage() {
     sdk.actions.ready();
   }, []);
 
-  const loadTokens = async () => {
-    if (!address) return setStatus("⚠️ Wallet belum terhubung");
+  // ✅ AUTO LOAD TOKENS — saat wallet siap
+  useEffect(() => {
+    if (!isConnected || !address) return;
 
+    // delay 350ms agar provider & RPC ready (ini yang bikin sebelumnya gagal)
+    const t = setTimeout(() => {
+      loadTokens();
+    }, 350);
+
+    return () => clearTimeout(t);
+  }, [isConnected, address]);
+
+  const loadTokens = async () => {
+    if (!address) return;
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
     if (!key) return setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum di isi");
 
-    setStatus("⏳ Loading wallet tokens...");
+    setStatus("⏳ Scanning tokens...");
 
     const result = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
       method: "POST",
@@ -79,12 +91,12 @@ export default function HomePage() {
     );
 
     setTokens(final.filter((t) => t.balance > 0));
-    setStatus("✅ Token loaded");
+    setStatus("✅ Tokens Ready ✅");
   };
 
+
   const burn = async () => {
-    if (!address) return setStatus("⚠️ Wallet Not Connected");
-    if (!selected.length) return setStatus("Select To Burn");
+    if (!selected.length) return setStatus("Select token to burn.");
 
     try {
       setStatus("🔥 Preparing burn...");
@@ -119,7 +131,10 @@ export default function HomePage() {
       });
 
       setLastBurnTx(res?.transactionHash || res?.hash || null);
-      setStatus("✅ Burn success!");
+      setStatus("✅ Burn Success!");
+      setSelected([]);
+      loadTokens(); // auto refresh after burn
+
     } catch (e: any) {
       setStatus("❌ " + e.message);
     }
@@ -128,84 +143,75 @@ export default function HomePage() {
   const shareWarpcast = () => {
     if (!lastBurnTx) return;
     sdk.actions.openUrl(
-      `https://warpcast.com/~/compose?text=${encodeURIComponent("I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain")}`
+      `https://warpcast.com/~/compose?text=${encodeURIComponent(
+        "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
+      )}`
     );
   };
 
   return (
-    <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-6 flex flex-col items-center">
+    <div className="min-h-screen bg-[#111] text-gray-100 px-4 py-5 flex flex-col items-center overflow-hidden">
 
-      <h1 className="text-3xl font-bold mb-2 text-center">PUBS BURN</h1>
-      <p className="text-sm text-gray-400 mb-4 text-center">
-        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
+      <h1 className="text-3xl font-bold text-center mb-2">PUBS BURN</h1>
+      <p className="text-sm text-gray-400 mb-3">
+        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting..."}
       </p>
 
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#333] overflow-hidden">
 
-        {/* SELECT ALL */}
-        <div className="flex justify-end p-2 border-b border-[#222] bg-[#111] sticky top-0">
+        {/* Select All */}
+        <div className="flex justify-end p-2 border-b border-[#222] bg-[#111] sticky top-0 z-10">
           <button
             onClick={() =>
-              selected.length === tokens.length
-                ? setSelected([])
-                : setSelected(tokens.map((t) => t.address))
+              selected.length === tokens.length ? setSelected([]) : setSelected(tokens.map(t => t.address))
             }
-            className="text-sm text-[#3b82f6] hover:text-[#5ea1ff]"
+            className="text-sm text-[#3b82f6]"
           >
             {selected.length === tokens.length ? "Unselect All" : "Select All"}
           </button>
         </div>
 
-        {/* AUTO HEIGHT SCROLL LIST */}
-        <div className="overflow-y-auto divide-y divide-[#222] no-scrollbar" style={{ maxHeight: "calc(100vh - 300px)" }}>
+        {/* List */}
+        <div className="flex-1 max-h-[380px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
           {tokens.map((t) => {
             const active = selected.includes(t.address);
             return (
               <button
                 key={t.address}
-                onClick={() => setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])}
-                className={`flex items-center w-full px-4 py-3 hover:bg-[#1a1a1a] transition ${
+                onClick={() =>
+                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
+                }
+                className={`flex items-center px-4 py-3 text-left hover:bg-[#1a1a1a] ${
                   active ? "bg-[#193c29]" : ""
                 }`}
               >
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate">{t.name}</div>
-                  <div className="text-xs text-gray-400 truncate">
-                    {t.symbol} • {t.balance.toFixed(4)}
-                  </div>
+                  <div className="text-xs text-gray-400 truncate">{t.symbol} • {t.balance.toFixed(4)}</div>
                 </div>
-                <div className="text-sm text-gray-300 shrink-0">${t.price ?? "-"}</div>
-                <div className="ml-3 w-5 h-5 rounded border border-gray-500 flex items-center justify-center">
-                  {active && <div className="w-3 h-3 rounded bg-[#2ecc71]" />}
-                </div>
+                <div className="text-sm text-gray-300">${t.price ?? "-"}</div>
               </button>
             );
           })}
         </div>
 
-        {/* BUTTONS */}
-        <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-3">
-          <button onClick={burn} className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold">
+        {/* Buttons */}
+        <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-2">
+          <button onClick={burn} className="py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold">
             🔥 Burn Selected {selected.length > 0 && `(${selected.length})`}
-          </button>
-
-          <button onClick={loadTokens} className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold">
-            🔄 Load Tokens
           </button>
         </div>
       </div>
 
       {lastBurnTx && (
-        <button
-          onClick={shareWarpcast}
-          className="mt-4 w-full max-w-sm py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold"
-        >
+        <button onClick={shareWarpcast} className="mt-3 w-full max-w-sm py-3 bg-purple-600 rounded-xl">
           📣 Share on Warpcast
         </button>
       )}
 
-      <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
+      <p className="text-center text-sm text-gray-400 mt-3">{status}</p>
     </div>
   );
 }
+
