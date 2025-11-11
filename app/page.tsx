@@ -10,6 +10,9 @@ const ABI = [
   "function quoteErc20Fee(address token, uint256 amount) view returns (uint256, uint8)",
   "function burnToken(address token, uint256 amount, string scanSummary) payable",
 ];
+const ERC20_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)",
+];
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
@@ -23,7 +26,6 @@ export default function HomePage() {
     sdk.actions.ready();
   }, []);
 
-  // ✅ AUTO LOAD TOKENS when wallet ready
   useEffect(() => {
     if (!isConnected || !address) return;
     const t = setTimeout(loadTokens, 350);
@@ -80,8 +82,8 @@ export default function HomePage() {
           name: name || symbol || "Unknown",
           symbol: symbol || "TKN",
           decimals: decimalsSafe,
-          balance: balanceString,   // display only
-          rawBalance: t.tokenBalance, // ✅ for burning (BigInt safe)
+          balance: balanceString,
+          rawBalance: BigInt(t.tokenBalance), // ✅ Correct BigInt raw value
           logoUrl,
           price,
         };
@@ -92,11 +94,12 @@ export default function HomePage() {
     setStatus("Ready to burn");
   };
 
+  // ✅ FINAL BURN WITH AUTOMATIC APPROVE
   const burn = async () => {
     if (!selected.length) return setStatus("Select token to burn.");
 
     try {
-      setStatus("🔥 Preparing burn...");
+      setStatus("🔥 Approving + Burning...");
 
       const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
@@ -108,10 +111,20 @@ export default function HomePage() {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
-        // ✅ Use rawBalance – no rounding error
-        const amountWei = BigInt(row.rawBalance);
+        const amountWei = row.rawBalance; // ✅ exact BigInt
+        const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+
+        // 1) ✅ Approve burn contract to spend token
+        calls.push({
+          to: row.address,
+          value: 0,
+          data: tokenContract.interface.encodeFunctionData("approve", [CONTRACT, amountWei]),
+        });
+
+        // 2) ✅ Get fee for the burn
         const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
 
+        // 3) ✅ Burn call
         calls.push({
           to: CONTRACT,
           value: feeWei,
@@ -204,20 +217,14 @@ export default function HomePage() {
         </div>
 
         <div className="p-3 border-t border-[#222] bg-[#111] flex flex-col gap-3">
-          <button
-            onClick={burn}
-            className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold"
-          >
+          <button onClick={burn} className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold">
             Burn {selected.length > 0 && `(${selected.length})`}
           </button>
-
-          <button
-            onClick={loadTokens}
-            className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold transition"
-          >
+          <button onClick={loadTokens} className="w-full py-3 bg-[#3b82f6] hover:bg-[#5ea1ff] rounded-xl font-semibold transition">
             Scan / Refresh Tokens
           </button>
         </div>
+
       </div>
 
       {lastBurnTx && (
