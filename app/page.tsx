@@ -99,17 +99,37 @@ export default function HomePage() {
 
   const burn = async () => {
   if (!selected.length) return setStatus("Select token(s) to burn.");
+
   try {
     setStatus("🔥 Starting approval & burn...");
     const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
     const signer = await provider.getSigner();
-    const contract = new ethers.Contract(CONTRACT, ABI, signer);
+    const contract = new ethers.Contract(CONTRACT, ABI, signer) as unknown as {
+  burnToken: (
+    token: string,
+    amount: bigint,
+    scanSummary: string,
+    opts?: { value?: bigint; gasLimit?: bigint }
+  ) => Promise<any>;
+  quoteErc20Fee: (token: string, amount: bigint) => Promise<[bigint, number]>;
+  callStatic: {
+    burnToken: (
+      token: string,
+      amount: bigint,
+      scanSummary: string,
+      opts?: { value?: bigint }
+    ) => Promise<void>;
+  };
+};
+
 
     for (const tokenAddress of selected) {
       const row = tokens.find((t) => t.address === tokenAddress);
       if (!row || row.rawBalance === 0n) continue;
 
-      const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+     const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer) as unknown as {
+  approve: (spender: string, amount: bigint, opts?: { gasLimit?: bigint }) => Promise<any>;
+};
 
       // ✅ STEP 1 — APPROVE
       try {
@@ -118,28 +138,38 @@ export default function HomePage() {
           gasLimit: 200_000n,
         });
         await approveTx.wait();
+        console.log(`✅ Approved ${row.symbol}`);
       } catch (err) {
         console.warn(`⛔ Approve failed for ${row.symbol}, skipping.`, err);
         continue;
       }
 
-      // ✅ STEP 2 — GET FEE (fallback 0.00001 ETH)
-      let feeWei: bigint = 0n;
+      // ✅ STEP 2 — GET FEE OR USE FALLBACK
+      let feeWei: bigint;
       try {
-        [feeWei] = await contract.quoteErc20Fee(row.address, row.rawBalance);
-        if (!feeWei || feeWei === 0n) {
-          console.warn(`⚠️ Fee quote returned 0, using fallback.`);
-          feeWei = ethers.parseUnits("0.00001", "ether");
-        }
-      } catch (err) {
-        console.warn(`⚠️ Fee quote failed for ${row.symbol}, using fallback.`, err);
-        feeWei = ethers.parseUnits("0.00001", "ether");
+        const [fee] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+        feeWei = fee && fee > 0n ? fee : ethers.parseUnits("0.00001", "ether");
+      } catch {
+        feeWei = ethers.parseUnits("0.00001", "ether"); // fallback
       }
 
-      // ✅ STEP 3 — BURN
+      // ✅ STEP 3 — CHECK IF CALL IS VALID (to avoid revert)
       try {
-        setStatus(`🔥 Burning ${row.symbol}...`);
-        console.log("🚀 Sending burn transaction:", {
+        await contract.callStatic.burnToken(
+          row.address,
+          row.rawBalance,
+          JSON.stringify({ safe: true }),
+          { value: feeWei }
+        );
+      } catch (checkErr: any) {
+        console.warn(`⚠️ burnToken reverted in simulation for ${row.symbol}:`, checkErr.reason);
+        continue;
+      }
+
+      // ✅ STEP 4 — SEND BURN TRANSACTION (pop-up)
+      try {
+        setStatus(`🔥 Burning ${row.symbol}... Confirm in wallet.`);
+        console.log("🚀 Sending burn transaction", {
           token: row.address,
           amount: row.rawBalance.toString(),
           fee: feeWei.toString(),
@@ -150,21 +180,23 @@ export default function HomePage() {
           row.rawBalance,
           JSON.stringify({ safe: true }),
           {
-            value: feeWei.toString(), // ✅ MUST be string, not hex
-            gasLimit: 300_000n, // ✅ force popup even if gas estimate fails
+            value: feeWei, // ✅ bigint, not string
+            gasLimit: 300_000n,
           }
         );
 
         setStatus(`⏳ Waiting confirmation for ${row.symbol}...`);
         const receipt = await tx.wait();
         console.log(`✅ Burn success: ${row.symbol}`, receipt);
-      } catch (err: any) {
-        console.warn(`🔥 Burn failed for ${row.symbol}:`, err.message || err);
+        setStatus(`✅ ${row.symbol} burned successfully!`);
+      } catch (burnErr: any) {
+        console.warn(`🔥 Burn failed for ${row.symbol}:`, burnErr.message);
+        setStatus(`❌ Burn failed for ${row.symbol}: ${burnErr.message}`);
         continue;
       }
     }
 
-    setStatus("✅ All done! Refreshing...");
+    setStatus("✅ All tokens processed. Refreshing...");
     setSelected([]);
     loadTokens();
   } catch (e: any) {
