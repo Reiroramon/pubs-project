@@ -8,10 +8,11 @@
   "splashImageUrl": "https://pubs-burn.vercel.app/splash.png",
   "splashBackgroundColor": "#0A0A0A",
   "buttonTitle": "Open PUBS BURN",
-  "requiredCapabilities": [
-    "wallet.getEthereumProvider",
-    "actions.signIn"
-  ],
+ "requiredCapabilities": [
+  "wallet.getEthereumProvider",
+  "actions.signIn",
+  "wallet_sendCalls"
+],
   "requiredChains": [
     "eip155:8453"
   ]
