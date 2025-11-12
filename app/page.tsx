@@ -20,6 +20,7 @@ export default function HomePage() {
   const [tokens, setTokens] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
+  const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
 
   useEffect(() => {
     sdk.actions.ready();
@@ -99,85 +100,60 @@ export default function HomePage() {
 
 const burn = async () => {
   if (!selected.length) return setStatus("Select token(s) to burn.");
-
   try {
-    setStatus("🔥 Starting approval & burn...");
+    setStatus("🔥 Starting process...");
     const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
     const signer = await provider.getSigner();
-    const contract = new ethers.Contract(CONTRACT, ABI, signer) as unknown as {
-      burnToken: (
-        token: string,
-        amount: bigint,
-        scanSummary: string,
-        opts?: { value?: bigint; gasLimit?: bigint }
-      ) => Promise<any>;
-      quoteErc20Fee: (token: string, amount: bigint) => Promise<[bigint, number]>;
-    };
+    const contract = new ethers.Contract(CONTRACT, ABI, signer);
 
     for (const tokenAddress of selected) {
       const row = tokens.find((t) => t.address === tokenAddress);
       if (!row || row.rawBalance === 0n) continue;
 
-      const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer) as unknown as {
-        approve: (spender: string, amount: bigint, opts?: { gasLimit?: bigint }) => Promise<any>;
-      };
-
-      // ✅ STEP 1 — APPROVE
-      try {
+      // ✅ STEP 1 — Check apakah sudah di-approve
+      const isApproved = approvedTokens.includes(tokenAddress);
+      if (!isApproved) {
         setStatus(`🧾 Approving ${row.symbol}...`);
-        const approveTx = await tokenContract.approve(CONTRACT, row.rawBalance, {
-          gasLimit: 200_000n,
-        });
-        await approveTx.wait();
-        console.log(`✅ Approved ${row.symbol}`);
-      } catch (err) {
-        console.warn(`⛔ Approve failed for ${row.symbol}, skipping.`, err);
-        continue;
+        const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+        const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
+        await tx.wait();
+        setApprovedTokens((prev) => [...prev, tokenAddress]);
+        setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
+        continue; // keluar dulu, tombol akan berubah jadi "Burn Now"
       }
 
-      // ✅ STEP 2 — FEE
+      // ✅ STEP 2 — Fee
       let feeWei = ethers.parseUnits("0.00001", "ether");
       try {
         const [f] = await contract.quoteErc20Fee(row.address, row.rawBalance);
         if (f && f > 0n) feeWei = f;
-      } catch (err) {
-        console.warn(`⚠️ Failed to get fee for ${row.symbol}, using fallback.`, err);
+      } catch {
+        console.warn("⚠️ Using fallback fee");
       }
 
-      if (feeWei <= 0n) feeWei = ethers.parseUnits("0.00001", "ether");
+      // ✅ STEP 3 — Burn langsung via sendTransaction (agar popup pasti muncul)
+      setStatus(`🔥 Burning ${row.symbol}... Confirm in wallet.`);
+      const iface = new ethers.Interface(ABI);
+      const data = iface.encodeFunctionData("burnToken", [
+        row.address,
+        row.rawBalance,
+        JSON.stringify({ safe: true }),
+      ]);
 
-      // ✅ STEP 3 — BURN: Force popup via signer.sendTransaction()
-      try {
-        setStatus(`🔥 Burning ${row.symbol}... Confirm in wallet.`);
-        const iface = new ethers.Interface(ABI);
-        const data = iface.encodeFunctionData("burnToken", [
-          row.address,
-          row.rawBalance,
-          JSON.stringify({ safe: true }),
-        ]);
+      const tx = await signer.sendTransaction({
+        to: CONTRACT,
+        data,
+        value: feeWei,
+        gasLimit: 350_000n,
+      });
 
-        const tx = await signer.sendTransaction({
-          to: CONTRACT,
-          data,
-          value: feeWei,
-          gasLimit: 350_000n,
-        });
-
-        setStatus(`⏳ Waiting for confirmation of ${row.symbol}...`);
-        const receipt = await tx.wait();
-        console.log(`✅ Burn success: ${row.symbol}`, receipt);
-        setStatus(`✅ ${row.symbol} burned successfully!`);
-      } catch (err: any) {
-        console.warn(`🔥 Burn failed for ${row.symbol}:`, err.message);
-        setStatus(`❌ Burn failed for ${row.symbol}: ${err.message}`);
-      }
+      await tx.wait();
+      setStatus(`✅ Burned ${row.symbol} successfully!`);
     }
 
-    setStatus("✅ All tokens processed. Refreshing...");
-    setSelected([]);
     loadTokens();
   } catch (e: any) {
-    console.error("❌ Burn process failed:", e);
+    console.error(e);
     setStatus("❌ " + e.message);
   }
 };
