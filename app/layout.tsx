@@ -2,32 +2,26 @@
 
 import { useEffect } from 'react'
 import { sdk } from '@farcaster/miniapp-sdk'
+import Providers from './providers'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    try {
-      // Deteksi apakah app dibuka dari Farcaster Mini App environment
-      const url = new URL(window.location.href)
-      const isMiniApp =
-        url.pathname.startsWith('/mini') ||
-        url.searchParams.get('miniApp') === 'true' ||
-        (window.navigator.userAgent.toLowerCase().includes('farcaster'))
+    const url = new URL(window.location.href)
+    const isMiniApp =
+      url.pathname.startsWith('/mini') ||
+      url.searchParams.get('miniApp') === 'true' ||
+      (window.navigator.userAgent.toLowerCase().includes('farcaster'))
 
-      // Jika Mini App, inisialisasi SDK
-      if (isMiniApp) {
-        sdk.actions.ready({
-          disableNativeGestures: true // cegah gesture close di modal
-        })
-      }
-    } catch (e) {
-      console.warn('MiniApp detection failed:', e)
+    if (isMiniApp) {
+      sdk.actions.ready({
+        disableNativeGestures: true,
+      })
     }
   }, [])
 
   return (
     <html lang="en">
       <head>
-        {/* Meta untuk Farcaster Mini App */}
         <meta
           name="fc:miniapp"
           content={JSON.stringify({
@@ -40,15 +34,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 name: 'PUBS BURN',
                 url: 'https://pubs-burn.vercel.app',
                 splashImageUrl: 'https://pubs-burn.vercel.app/splash.png',
-                splashBackgroundColor: '#0A0A0A'
-              }
-            }
+                splashBackgroundColor: '#0A0A0A',
+              },
+            },
           })}
         />
       </head>
 
       <body className="bg-[#0A0A0A] text-gray-100">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   )
