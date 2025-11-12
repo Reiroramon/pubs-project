@@ -4,7 +4,7 @@
     "payload": "eyJkb21haW4iOiJwdWJzLWJ1cm4udmVyY2VsLmFwcCJ9",
     "signature": "aSzqOkZH8eKxb2wW80NHVk311ugLNlQxFyrtlR7BppU1QeEMtceysbKYIKw8BtP8dSEWItFZUBN7bNgeK35/6xs="
   },
-  "miniapp": {
+  "frame": {
     "version": "1",
     "name": "PUBS BURN",
     "subtitle": "Burn scam tokens",
@@ -31,7 +31,7 @@
     "requiredCapabilities": [
       "actions.signIn",
       "wallet.getEthereumProvider",
-      "wallet.sendCalls"
+      "wallet.sendTransaction"
     ]
   }
 }
