@@ -106,55 +106,37 @@ export default function HomePage() {
       const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
+const calls = [];
 
-      const calls = [];
+for (const tokenAddress of selected) {
+  const row = tokens.find((t) => t.address === tokenAddress);
+  if (!row) continue;
 
-      for (const tokenAddress of selected) {
-        const row = tokens.find((t) => t.address === tokenAddress);
-        if (!row) continue;
+  const amountWei = row.rawBalance;
+  const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
 
-        const amountWei = row.rawBalance;
-        if (amountWei === 0n) continue;
-
-        const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-
-        calls.push({
-          to: row.address,
-          value: 0,
-          data: tokenContract.interface.encodeFunctionData("approve", [CONTRACT, amountWei]),
-        });
-
-        let feeWei;
-        try {
-          [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
-        } catch {
-          continue;
-        }
-
-        calls.push({
-          to: CONTRACT,
-          value: feeWei,
-          data: contract.interface.encodeFunctionData("burnToken", [
-            row.address,
-            amountWei,
-            JSON.stringify({ safe: true }),
-          ]),
-        });
-      }
+  calls.push({
+    to: CONTRACT,
+    value: feeWei, // nanti dikonversi ke hex di map()
+    data: contract.interface.encodeFunctionData("burnToken", [
+      row.address,
+      amountWei,
+      JSON.stringify({ safe: true }),
+    ]),
+  });
+}
 
       const res = await (sdk as any).wallet.ethProvider.request({
   method: "wallet_sendCalls",
   params: [{
-    chainId: "eip155:8453", // ✅ wajib string
-    atomicRequired: false,  // ✅ wajib boolean
+    chainId: "0x2105", // ✅ Base mainnet hex
+    atomicRequired: false,
     calls: calls.map((c) => ({
       ...c,
-      value: c.value?.toString() || "0", // ✅ pastikan string
+      value: ethers.toBeHex(BigInt(c.value || 0)), // ✅ Convert value to hex
     })),
   }],
 });
-
-
 
       setLastBurnTx(res?.transactionHash || res?.hash || null);
       setStatus("✅ Burn Success!");
