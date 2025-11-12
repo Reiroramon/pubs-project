@@ -4,12 +4,11 @@
     "payload": "eyJkb21haW4iOiJwdWJzLWJ1cm4udmVyY2VsLmFwcCJ9",
     "signature": "aSzqOkZH8eKxb2wW80NHVk311ugLNlQxFyrtlR7BppU1QeEMtceysbKYIKw8BtP8dSEWItFZUBN7bNgeK35/6xs="
   },
-  "frame": {
+  "miniapp": {
     "version": "1",
     "name": "PUBS BURN",
-    "subtitle":  "Burn scam tokens",
-    "description": "PUBS BURN helps you clean your wallet by detecting and burning scam tokens in a single tap , Stay safe onchain with confidence",
-
+    "subtitle": "Burn scam tokens",
+    "description": "PUBS BURN helps you clean your wallet…",
     "homeUrl": "https://pubs-burn.vercel.app",
     "iconUrl": "https://pubs-burn.vercel.app/icon.png",
     "imageUrl": "https://pubs-burn.vercel.app/image.png",
@@ -17,7 +16,12 @@
     "splashImageUrl": "https://pubs-burn.vercel.app/splash.png",
     "splashBackgroundColor": "#0A0A0A",
     "requiredChains": ["eip155:8453"],
-    "requiredCapabilities": ["actions.signIn", "wallet.getEthereumProvider", "wallet_sendCalls"]
+    "requiredCapabilities": [
+      "actions.signIn",
+      "wallet.getEthereumProvider",
+      "wallet_sendCalls"
+    ]
   }
 }
+
 
