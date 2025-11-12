@@ -102,27 +102,33 @@ const burn = async () => {
   if (!selected.length) return setStatus("Select token(s) to burn.");
   try {
     setStatus("🔥 Starting process...");
+
+    // ✅ Provider & signer dari Farcaster SDK (tetap untuk kirim tx)
     const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(CONTRACT, ABI, signer);
+
+    // ✅ Provider publik (untuk tunggu receipt)
+    const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
     for (const tokenAddress of selected) {
       const row = tokens.find((t) => t.address === tokenAddress);
       if (!row || row.rawBalance === 0n) continue;
 
-      // ✅ STEP 1 — Check apakah sudah di-approve
+      // === STEP 1: Approve ===
       const isApproved = approvedTokens.includes(tokenAddress);
       if (!isApproved) {
         setStatus(`🧾 Approving ${row.symbol}...`);
         const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
         const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
-        await tx.wait();
+        setStatus(`⏳ Waiting for ${row.symbol} approval...`);
+        await rpc.waitForTransaction(tx.hash); // ✅ gunakan rpc publik
         setApprovedTokens((prev) => [...prev, tokenAddress]);
         setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
-        continue; // keluar dulu, tombol akan berubah jadi "Burn Now"
+        continue;
       }
 
-      // ✅ STEP 2 — Fee
+      // === STEP 2: Fee ===
       let feeWei = ethers.parseUnits("0.00001", "ether");
       try {
         const [f] = await contract.quoteErc20Fee(row.address, row.rawBalance);
@@ -131,7 +137,7 @@ const burn = async () => {
         console.warn("⚠️ Using fallback fee");
       }
 
-      // ✅ STEP 3 — Burn langsung via sendTransaction (agar popup pasti muncul)
+      // === STEP 3: Burn ===
       setStatus(`🔥 Burning ${row.symbol}... Confirm in wallet.`);
       const iface = new ethers.Interface(ABI);
       const data = iface.encodeFunctionData("burnToken", [
@@ -147,7 +153,8 @@ const burn = async () => {
         gasLimit: 350_000n,
       });
 
-      await tx.wait();
+      setStatus(`⏳ Waiting for ${row.symbol} burn...`);
+      await rpc.waitForTransaction(tx.hash); // ✅ gunakan RPC publik untuk tunggu receipt
       setStatus(`✅ Burned ${row.symbol} successfully!`);
     }
 
@@ -157,6 +164,7 @@ const burn = async () => {
     setStatus("❌ " + e.message);
   }
 };
+
 
 
   const shareWarpcast = () => {
