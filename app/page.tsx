@@ -224,20 +224,34 @@ const burn = async () => {
           })}
         </div>
 
-        <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
-          <button
-            onClick={burn}
-            className="w-full py-3 bg-[#00FF3C] hover:bg-[#32FF67] text-black rounded-xl font-bold"
-          >
-            Burn {selected.length > 0 && `(${selected.length})`}
-          </button>
-          <button
-            onClick={loadTokens}
-            className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]"
-          >
-            Scan / Refresh Tokens
-          </button>
-        </div>
+       <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
+
+  {/* === MAIN ACTION BUTTON === */}
+  <button
+    onClick={burn}
+    className={`w-full py-3 rounded-xl font-bold
+      ${selected.every((s) => approvedTokens.includes(s))
+        ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black"
+        : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
+      }
+    `}
+  >
+    {selected.length === 0
+      ? "Select token first"
+      : selected.every((s) => approvedTokens.includes(s))
+        ? `Burn Now (${selected.length})`
+        : `Approve Selected (${selected.length})`}
+  </button>
+
+  {/* === REFRESH BUTTON === */}
+  <button
+    onClick={loadTokens}
+    className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]"
+  >
+    Scan / Refresh Tokens
+  </button>
+
+</div>
       </div>
 
       {lastBurnTx && (
