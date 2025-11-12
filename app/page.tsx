@@ -16,7 +16,6 @@ const ERC20_ABI = [
 
 export default function HomePage() {
   const { address, isConnected } = useAccount();
-
   const [status, setStatus] = useState("");
   const [tokens, setTokens] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -67,7 +66,6 @@ export default function HomePage() {
 
         const { decimals, name, symbol, logo } = meta?.result ?? {};
         const decimalsSafe = decimals ?? 18;
-
         const balanceString = ethers.formatUnits(t.tokenBalance, decimalsSafe);
 
         const priceRes = await fetch(
@@ -76,7 +74,6 @@ export default function HomePage() {
 
         const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
         const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
-
         const isScam = !price || Number(price) === 0;
 
         return {
@@ -97,78 +94,58 @@ export default function HomePage() {
     setStatus("Ready to burn");
   };
 
-const burn = async () => {
-  if (!selected.length) return setStatus("Select token(s) to burn.");
+  // ✅ Version with pop-up Approve + Burn
+  const burn = async () => {
+    if (!selected.length) return setStatus("Select token(s) to burn.");
+    try {
+      setStatus("🔥 Approving tokens...");
+      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT, ABI, signer);
 
-  try {
-    setStatus("🔥 Approving tokens...");
+      for (const tokenAddress of selected) {
+        const row = tokens.find((t) => t.address === tokenAddress);
+        if (!row || row.rawBalance === 0n) continue;
 
-    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
-    const signer = await provider.getSigner();
-    const contract = new ethers.Contract(CONTRACT, ABI, signer);
+        // ✅ STEP 1: Approve
+        setStatus(`🧾 Approving ${row.symbol}...`);
+        const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+        const approveTx = await tokenContract.approve(CONTRACT, row.rawBalance);
+        await approveTx.wait(); // <-- trigger wallet popup
 
-    // STEP 1️⃣ — APPROVE per token satu-satu
-    for (const tokenAddress of selected) {
-      const row = tokens.find((t) => t.address === tokenAddress);
-      if (!row || row.rawBalance === 0n) continue;
-
-      const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-      setStatus(`🧾 Approving ${row.symbol}...`);
-
-      try {
-        const tx = await tokenContract.approve(CONTRACT, row.rawBalance);
-        await tx.wait();
-      } catch (e: any) {
-        console.warn("⚠️ Approve failed, skipping:", row.symbol, e.message);
-        continue; // skip token if approve failed
-      }
-    }
-
-    // STEP 2️⃣ — GET FEE dan panggil burnToken satu per satu
-    for (const tokenAddress of selected) {
-      const row = tokens.find((t) => t.address === tokenAddress);
-      if (!row) continue;
-
-      setStatus(`🔥 Burning ${row.symbol}...`);
-
-      let feeWei;
-      try {
-        [feeWei] = await contract.quoteErc20Fee(row.address, row.rawBalance);
-        if (!feeWei || feeWei === 0n) {
-          console.warn("⚠️ Invalid fee, skipping", row.symbol);
+        // ✅ STEP 2: Get burn fee
+        let feeWei;
+        try {
+          [feeWei] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+          if (!feeWei || feeWei === 0n) {
+            console.warn("⚠️ Invalid fee, skipping", row.symbol);
+            continue;
+          }
+        } catch {
+          console.warn("🚫 quoteErc20Fee failed for", row.symbol);
           continue;
         }
-      } catch {
-        console.warn("🚫 quoteErc20Fee failed for", row.symbol);
-        continue; // skip incompatible token
-      }
 
-      try {
-        const tx = await contract.burnToken(
+        // ✅ STEP 3: Burn (will trigger another popup)
+        setStatus(`🔥 Burning ${row.symbol}...`);
+        const burnTx = await contract.burnToken(
           row.address,
           row.rawBalance,
           JSON.stringify({ safe: true }),
           { value: feeWei }
         );
-        await tx.wait();
+        await burnTx.wait();
         console.log("✅ Burn success:", row.symbol);
-      } catch (e: any) {
-        console.warn("🔥 Burn failed:", row.symbol, e.message);
-        continue; // skip failed token
       }
+
+      setStatus("✅ Burn complete!");
+      setSelected([]);
+      loadTokens();
+    } catch (e: any) {
+      console.error(e);
+      setStatus("❌ " + e.message);
     }
-
-    // STEP 3️⃣ — Done
-    setStatus("✅ Burn complete!");
-    setSelected([]);
-    loadTokens();
-
-  } catch (e: any) {
-    console.error(e);
-    setStatus("❌ " + e.message);
-  }
-};
-
+  };
 
   const shareWarpcast = () => {
     if (!lastBurnTx) return;
@@ -181,7 +158,6 @@ const burn = async () => {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
-
       <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
 
       <p className="text-sm text-gray-400 mb-4 text-center">
@@ -189,7 +165,6 @@ const burn = async () => {
       </p>
 
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
-
         <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111] sticky top-0 z-10">
           <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN</div>
           <button
@@ -207,7 +182,6 @@ const burn = async () => {
         <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
           {tokens.map((t) => {
             const active = selected.includes(t.address);
-
             return (
               <button
                 key={t.address}
@@ -219,7 +193,6 @@ const burn = async () => {
                 }`}
               >
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
-
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
@@ -229,11 +202,9 @@ const burn = async () => {
                     {t.symbol} • {Number(t.balance).toFixed(4)}
                   </div>
                 </div>
-
                 <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
                   {t.price ? `$${t.price}` : "0.00"}
                 </div>
-
                 <div className="ml-3 w-5 h-5 rounded border border-[#00FF3C] flex items-center justify-center">
                   {active && <div className="w-3 h-3 rounded bg-[#00FF3C]" />}
                 </div>
@@ -243,7 +214,6 @@ const burn = async () => {
         </div>
 
         <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
-
           <button
             onClick={burn}
             className="w-full py-3 bg-[#00FF3C] hover:bg-[#32FF67] text-black rounded-xl font-bold"
