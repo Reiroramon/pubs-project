@@ -97,55 +97,78 @@ export default function HomePage() {
     setStatus("Ready to burn");
   };
 
-  const burn = async () => {
-    if (!selected.length) return setStatus("Select token to burn.");
+const burn = async () => {
+  if (!selected.length) return setStatus("Select token(s) to burn.");
 
-    try {
-      setStatus("🔥 Approving & Burning...");
+  try {
+    setStatus("🔥 Approving tokens...");
 
-      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT, ABI, signer);
-const calls = [];
+    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(CONTRACT, ABI, signer);
 
-for (const tokenAddress of selected) {
-  const row = tokens.find((t) => t.address === tokenAddress);
-  if (!row) continue;
+    // STEP 1️⃣ — APPROVE per token satu-satu
+    for (const tokenAddress of selected) {
+      const row = tokens.find((t) => t.address === tokenAddress);
+      if (!row || row.rawBalance === 0n) continue;
 
-  const amountWei = row.rawBalance;
-  const [feeWei] = await contract.quoteErc20Fee(row.address, amountWei);
+      const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+      setStatus(`🧾 Approving ${row.symbol}...`);
 
-  calls.push({
-    to: CONTRACT,
-    value: feeWei, // nanti dikonversi ke hex di map()
-    data: contract.interface.encodeFunctionData("burnToken", [
-      row.address,
-      amountWei,
-      JSON.stringify({ safe: true }),
-    ]),
-  });
-}
-
-      const res = await (sdk as any).wallet.ethProvider.request({
-  method: "wallet_sendCalls",
-  params: [{
-    chainId: "0x2105", // ✅ Base mainnet hex
-    atomicRequired: false,
-    calls: calls.map((c) => ({
-      ...c,
-      value: ethers.toBeHex(BigInt(c.value || 0)), // ✅ Convert value to hex
-    })),
-  }],
-});
-
-      setLastBurnTx(res?.transactionHash || res?.hash || null);
-      setStatus("✅ Burn Success!");
-      setSelected([]);
-      loadTokens();
-    } catch (e: any) {
-      setStatus("❌ " + e.message);
+      try {
+        const tx = await tokenContract.approve(CONTRACT, row.rawBalance);
+        await tx.wait();
+      } catch (e: any) {
+        console.warn("⚠️ Approve failed, skipping:", row.symbol, e.message);
+        continue; // skip token if approve failed
+      }
     }
-  };
+
+    // STEP 2️⃣ — GET FEE dan panggil burnToken satu per satu
+    for (const tokenAddress of selected) {
+      const row = tokens.find((t) => t.address === tokenAddress);
+      if (!row) continue;
+
+      setStatus(`🔥 Burning ${row.symbol}...`);
+
+      let feeWei;
+      try {
+        [feeWei] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+        if (!feeWei || feeWei === 0n) {
+          console.warn("⚠️ Invalid fee, skipping", row.symbol);
+          continue;
+        }
+      } catch {
+        console.warn("🚫 quoteErc20Fee failed for", row.symbol);
+        continue; // skip incompatible token
+      }
+
+      try {
+        const tx = await contract.burnToken(
+          row.address,
+          row.rawBalance,
+          JSON.stringify({ safe: true }),
+          { value: feeWei }
+        );
+        await tx.wait();
+        console.log("✅ Burn success:", row.symbol);
+      } catch (e: any) {
+        console.warn("🔥 Burn failed:", row.symbol, e.message);
+        continue; // skip failed token
+      }
+    }
+
+    // STEP 3️⃣ — Done
+    setStatus("✅ Burn complete!");
+    setSelected([]);
+    loadTokens();
+
+  } catch (e: any) {
+    console.error(e);
+    setStatus("❌ " + e.message);
+  }
+};
+
 
   const shareWarpcast = () => {
     if (!lastBurnTx) return;
