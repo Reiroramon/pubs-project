@@ -141,19 +141,19 @@ export default function HomePage() {
           ]),
         });
       }
-const res = await (sdk as any).wallet.ethProvider.request({
+
+      const res = await (sdk as any).wallet.ethProvider.request({
   method: "wallet_sendCalls",
-  params: [
-    {
-      chainId: "eip155:8453",      // BASE MAINNET
-      atomic: true,                // Ensure calls either all succeed or none
-      calls: calls.map((c) => ({
-        ...c,
-        value: c.value ? c.value.toString() : "0", // ✅ convert value to string
-      })),
-    },
-  ],
+  params: [{
+    chainId: "eip155:8453", // ✅ wajib string
+    atomicRequired: false,  // ✅ wajib boolean
+    calls: calls.map((c) => ({
+      ...c,
+      value: c.value?.toString() || "0", // ✅ pastikan string
+    })),
+  }],
 });
+
 
 
       setLastBurnTx(res?.transactionHash || res?.hash || null);
