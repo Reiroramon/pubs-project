@@ -129,7 +129,7 @@ const burn = async () => {
       }
 
       // === STEP 2: Fee ===
-      let feeWei = ethers.parseUnits("0.00001", "ether");
+      let feeWei = ethers.parseUnits("0.0001", "ether");
       try {
         const [f] = await contract.quoteErc20Fee(row.address, row.rawBalance);
         if (f && f > 0n) feeWei = f;
