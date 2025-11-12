@@ -138,7 +138,7 @@ const burn = async () => {
       }
 
       // === STEP 3: Burn ===
-      setStatus(`🔥 Burning ${row.symbol}... Confirm in wallet.`);
+      setStatus(`🔥 Burning ${row.symbol}...`);
       const iface = new ethers.Interface(ABI);
       const data = iface.encodeFunctionData("burnToken", [
         row.address,
@@ -161,7 +161,7 @@ const burn = async () => {
     loadTokens();
   } catch (e: any) {
     console.error(e);
-    setStatus("❌ " + e.message);
+    setStatus("❌ Failed, try again.");
   }
 };
 
