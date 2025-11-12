@@ -1,45 +1,39 @@
 {
-  "miniapp": {
-    "name": "PUBS BURN",
-    "version": "1",
-    "iconUrl": "https://pubs-burn.vercel.app/icon.png",
-    "homeUrl": "https://pubs-burn.vercel.app",
-    "imageUrl": "https://pubs-burn.vercel.app/image.png",
-    "buttonTitle": "Open PUBS BURN",
-    "splashImageUrl": "https://pubs-burn.vercel.app/splash.png",
-    "splashBackgroundColor": "#0A0A0A",
-    "webhookUrl": "https://pubs-burn.vercel.app/api/webhook",
-    "subtitle": "Burn scam tokens",
-    "description": "PUBS BURN helps you clean your wallet by detecting and burning scam tokens in a single tap , Stay safe onchain with confidence",
-    "primaryCategory": "utility",
-    "screenshotUrls": [
-      "https://pubs-burn.vercel.app/screenshot1.jpg"
-    ],
-    "heroImageUrl": "https://pubs-burn.vercel.app/hero.png",
-    "tags": [
-      "wallet",
-      "burn",
-      "degen",
-      "cleanup",
-      "security"
-    ],
-    "tagline": "Remove trash tokens forever",
-    "ogTitle": "PUBS BURN – Clean Your Wallet",
-    "ogDescription": "Burn scam tokens instantly and protect your wallet",
-    "ogImageUrl": "https://pubs-burn.vercel.app/hero.png",
-    "castShareUrl": "https://warpcast.com/~/compose?text=No+noise.+No+scams.+Just+clean+wallets.+PUBS+BURN+♻️🔥+https://pubs-burn.vercel.app"
-  },
   "accountAssociation": {
     "header": "eyJmaWQiOjM5MDQwMywidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE5YzBjQmVBRTg4MTQ3NmM4MzhkYTNlMjFhREIzRmM0NzU1MjVBRTUifQ",
     "payload": "eyJkb21haW4iOiJwdWJzLWJ1cm4udmVyY2VsLmFwcCJ9",
     "signature": "aSzqOkZH8eKxb2wW80NHVk311ugLNlQxFyrtlR7BppU1QeEMtceysbKYIKw8BtP8dSEWItFZUBN7bNgeK35/6xs="
   },
+  "miniapp": {
+    "version": "1",
+    "name": "PUBS BURN",
+    "subtitle": "Burn scam tokens",
+    "description": "PUBS BURN helps you clean your wallet by detecting and burning scam tokens in a single tap. Stay safe onchain with confidence.",
+    "primaryCategory": "utility",
+    "homeUrl": "https://pubs-burn.vercel.app",
+    "iconUrl": "https://pubs-burn.vercel.app/icon.png",
+    "imageUrl": "https://pubs-burn.vercel.app/image.png",
+    "buttonTitle": "Open PUBS BURN",
+    "splashImageUrl": "https://pubs-burn.vercel.app/splash.png",
+    "splashBackgroundColor": "#0A0A0A",
+    "screenshotUrls": [
+      "https://pubs-burn.vercel.app/screenshot1.jpg"
+    ],
+    "heroImageUrl": "https://pubs-burn.vercel.app/hero.png",
+    "tags": ["wallet", "burn", "degen", "cleanup", "security"],
+    "tagline": "Remove trash tokens forever",
+    "ogTitle": "PUBS BURN – Clean Your Wallet",
+    "ogDescription": "Burn scam tokens instantly and protect your wallet.",
+    "ogImageUrl": "https://pubs-burn.vercel.app/hero.png",
+    "castShareUrl": "https://warpcast.com/~/compose?text=No+noise.+No+scams.+Just+clean+wallets.+PUBS+BURN+♻️🔥+https://pubs-burn.vercel.app",
+    "webhookUrl": "https://pubs-burn.vercel.app/api/webhook",
+    "requiredChains": ["eip155:8453"],
     "requiredCapabilities": [
       "actions.signIn",
       "wallet.getEthereumProvider",
-      "wallet_sendCalls"
+      "wallet.sendCalls"
     ]
   }
-
+}
 
 
