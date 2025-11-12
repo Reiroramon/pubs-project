@@ -98,70 +98,81 @@ export default function HomePage() {
   };
 
   const burn = async () => {
-    if (!selected.length) return setStatus("Select token(s) to burn.");
-    try {
-      setStatus("🔥 Starting approval & burn...");
-      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT, ABI, signer);
+  if (!selected.length) return setStatus("Select token(s) to burn.");
+  try {
+    setStatus("🔥 Starting approval & burn...");
+    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(CONTRACT, ABI, signer);
 
-      for (const tokenAddress of selected) {
-        const row = tokens.find((t) => t.address === tokenAddress);
-        if (!row || row.rawBalance === 0n) continue;
+    for (const tokenAddress of selected) {
+      const row = tokens.find((t) => t.address === tokenAddress);
+      if (!row || row.rawBalance === 0n) continue;
 
-        const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+      const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
 
-        // ✅ STEP 1 — TRY APPROVE (with fallback gasLimit)
-        try {
-          setStatus(`🧾 Approving ${row.symbol}...`);
-          const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
-            gasLimit: 200_000n,
-          });
-          await tx.wait();
-        } catch (err) {
-          console.warn(`⛔ Approve failed for ${row.symbol}, skipping.`, err);
-          continue;
-        }
-
-        // ✅ STEP 2 — Get burn fee safely
-        let feeWei = 0n;
-        try {
-          [feeWei] = await contract.quoteErc20Fee(row.address, row.rawBalance);
-        } catch (err) {
-          console.warn(`⚠️ Fee quote failed for ${row.symbol}, skip.`, err);
-          continue;
-        }
-
-        if (!feeWei || feeWei === 0n) {
-          console.warn(`🚫 Invalid fee for ${row.symbol}`);
-          continue;
-        }
-
-        // ✅ STEP 3 — BURN (always trigger popup)
-        try {
-          setStatus(`🔥 Burning ${row.symbol}...`);
-          const tx = await contract.burnToken(
-            row.address,
-            row.rawBalance,
-            JSON.stringify({ safe: true }),
-            { value: ethers.toBeHex(feeWei), gasLimit: 250_000n }
-          );
-          await tx.wait();
-          console.log(`✅ Burned ${row.symbol}`);
-        } catch (err) {
-          console.warn(`🔥 Burn failed for ${row.symbol}`, err);
-          continue;
-        }
+      // ✅ STEP 1 — APPROVE
+      try {
+        setStatus(`🧾 Approving ${row.symbol}...`);
+        const approveTx = await tokenContract.approve(CONTRACT, row.rawBalance, {
+          gasLimit: 200_000n,
+        });
+        await approveTx.wait();
+      } catch (err) {
+        console.warn(`⛔ Approve failed for ${row.symbol}, skipping.`, err);
+        continue;
       }
 
-      setStatus("✅ All done! Refreshing...");
-      setSelected([]);
-      loadTokens();
-    } catch (e: any) {
-      console.error(e);
-      setStatus("❌ " + e.message);
+      // ✅ STEP 2 — GET FEE (fallback 0.00001 ETH)
+      let feeWei: bigint = 0n;
+      try {
+        [feeWei] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+        if (!feeWei || feeWei === 0n) {
+          console.warn(`⚠️ Fee quote returned 0, using fallback.`);
+          feeWei = ethers.parseUnits("0.00001", "ether");
+        }
+      } catch (err) {
+        console.warn(`⚠️ Fee quote failed for ${row.symbol}, using fallback.`, err);
+        feeWei = ethers.parseUnits("0.00001", "ether");
+      }
+
+      // ✅ STEP 3 — BURN
+      try {
+        setStatus(`🔥 Burning ${row.symbol}...`);
+        console.log("🚀 Sending burn transaction:", {
+          token: row.address,
+          amount: row.rawBalance.toString(),
+          fee: feeWei.toString(),
+        });
+
+        const tx = await contract.burnToken(
+          row.address,
+          row.rawBalance,
+          JSON.stringify({ safe: true }),
+          {
+            value: feeWei.toString(), // ✅ MUST be string, not hex
+            gasLimit: 300_000n, // ✅ force popup even if gas estimate fails
+          }
+        );
+
+        setStatus(`⏳ Waiting confirmation for ${row.symbol}...`);
+        const receipt = await tx.wait();
+        console.log(`✅ Burn success: ${row.symbol}`, receipt);
+      } catch (err: any) {
+        console.warn(`🔥 Burn failed for ${row.symbol}:`, err.message || err);
+        continue;
+      }
     }
-  };
+
+    setStatus("✅ All done! Refreshing...");
+    setSelected([]);
+    loadTokens();
+  } catch (e: any) {
+    console.error("❌ Burn process failed:", e);
+    setStatus("❌ " + e.message);
+  }
+};
+
 
   const shareWarpcast = () => {
     if (!lastBurnTx) return;
