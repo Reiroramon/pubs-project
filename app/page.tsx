@@ -27,78 +27,80 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!isConnected || !address) return;
-    const t = setTimeout(loadTokens, 350);
+    const t = setTimeout(loadTokens, 400);
     return () => clearTimeout(t);
   }, [isConnected, address]);
 
   const loadTokens = async () => {
     if (!address) return;
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
-    if (!key) return setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum di isi");
+    if (!key) return setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum diisi");
 
     setStatus("⏳ Scanning tokens...");
+    try {
+      const res = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "alchemy_getTokenBalances",
+          params: [address],
+        }),
+      });
+      const data = await res.json();
+      const list = data?.result?.tokenBalances ?? [];
 
-    const result = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        id: 1,
-        jsonrpc: "2.0",
-        method: "alchemy_getTokenBalances",
-        params: [address],
-      }),
-    }).then((r) => r.json());
+      const final = await Promise.all(
+        list.map(async (t: any) => {
+          const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              id: 2,
+              jsonrpc: "2.0",
+              method: "alchemy_getTokenMetadata",
+              params: [t.contractAddress],
+            }),
+          });
+          const meta = await metaRes.json();
+          const { decimals, name, symbol, logo } = meta?.result ?? {};
+          const decimalsSafe = decimals ?? 18;
 
-    const list = result?.result?.tokenBalances ?? [];
+          const balance = ethers.formatUnits(t.tokenBalance, decimalsSafe);
+          const priceRes = await fetch(
+            `https://api.dexscreener.com/latest/dex/tokens/${t.contractAddress}`
+          ).then((r) => r.json()).catch(() => null);
 
-    const final = await Promise.all(
-      list.map(async (t: any) => {
-        const meta = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            id: 2,
-            jsonrpc: "2.0",
-            method: "alchemy_getTokenMetadata",
-            params: [t.contractAddress],
-          }),
-        }).then((r) => r.json());
+          const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
+          const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
 
-        const { decimals, name, symbol, logo } = meta?.result ?? {};
-        const decimalsSafe = decimals ?? 18;
-        const balanceString = ethers.formatUnits(t.tokenBalance, decimalsSafe);
+          return {
+            address: t.contractAddress,
+            name: name || symbol || "Unknown",
+            symbol: symbol || "TKN",
+            decimals: decimalsSafe,
+            balance,
+            rawBalance: BigInt(t.tokenBalance),
+            logoUrl,
+            price,
+            isScam: !price || Number(price) === 0,
+          };
+        })
+      );
 
-        const priceRes = await fetch(
-          `https://api.dexscreener.com/latest/dex/tokens/${t.contractAddress}`
-        ).then((r) => r.json()).catch(() => null);
-
-        const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
-        const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
-        const isScam = !price || Number(price) === 0;
-
-        return {
-          address: t.contractAddress,
-          name: name || symbol || "Unknown",
-          symbol: symbol || "TKN",
-          decimals: decimalsSafe,
-          balance: balanceString,
-          rawBalance: BigInt(t.tokenBalance),
-          logoUrl,
-          price,
-          isScam,
-        };
-      })
-    );
-
-    setTokens(final.filter((t) => Number(t.balance) > 0));
-    setStatus("Ready to burn");
+      setTokens(final.filter((t) => Number(t.balance) > 0));
+      setStatus("✅ Ready to burn");
+    } catch (err) {
+      console.error(err);
+      setStatus("❌ Failed to scan tokens");
+    }
   };
 
-  // ✅ Version with pop-up Approve + Burn
   const burn = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
     try {
-      setStatus("🔥 Approving tokens...");
+      setStatus("🔥 Starting approval & burn...");
       const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
@@ -107,38 +109,52 @@ export default function HomePage() {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row || row.rawBalance === 0n) continue;
 
-        // ✅ STEP 1: Approve
-        setStatus(`🧾 Approving ${row.symbol}...`);
         const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-        const approveTx = await tokenContract.approve(CONTRACT, row.rawBalance);
-        await approveTx.wait(); // <-- trigger wallet popup
 
-        // ✅ STEP 2: Get burn fee
-        let feeWei;
+        // ✅ STEP 1 — TRY APPROVE (with fallback gasLimit)
         try {
-          [feeWei] = await contract.quoteErc20Fee(row.address, row.rawBalance);
-          if (!feeWei || feeWei === 0n) {
-            console.warn("⚠️ Invalid fee, skipping", row.symbol);
-            continue;
-          }
-        } catch {
-          console.warn("🚫 quoteErc20Fee failed for", row.symbol);
+          setStatus(`🧾 Approving ${row.symbol}...`);
+          const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
+            gasLimit: 200_000n,
+          });
+          await tx.wait();
+        } catch (err) {
+          console.warn(`⛔ Approve failed for ${row.symbol}, skipping.`, err);
           continue;
         }
 
-        // ✅ STEP 3: Burn (will trigger another popup)
-        setStatus(`🔥 Burning ${row.symbol}...`);
-        const burnTx = await contract.burnToken(
-          row.address,
-          row.rawBalance,
-          JSON.stringify({ safe: true }),
-          { value: feeWei }
-        );
-        await burnTx.wait();
-        console.log("✅ Burn success:", row.symbol);
+        // ✅ STEP 2 — Get burn fee safely
+        let feeWei = 0n;
+        try {
+          [feeWei] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+        } catch (err) {
+          console.warn(`⚠️ Fee quote failed for ${row.symbol}, skip.`, err);
+          continue;
+        }
+
+        if (!feeWei || feeWei === 0n) {
+          console.warn(`🚫 Invalid fee for ${row.symbol}`);
+          continue;
+        }
+
+        // ✅ STEP 3 — BURN (always trigger popup)
+        try {
+          setStatus(`🔥 Burning ${row.symbol}...`);
+          const tx = await contract.burnToken(
+            row.address,
+            row.rawBalance,
+            JSON.stringify({ safe: true }),
+            { value: ethers.toBeHex(feeWei), gasLimit: 250_000n }
+          );
+          await tx.wait();
+          console.log(`✅ Burned ${row.symbol}`);
+        } catch (err) {
+          console.warn(`🔥 Burn failed for ${row.symbol}`, err);
+          continue;
+        }
       }
 
-      setStatus("✅ Burn complete!");
+      setStatus("✅ All done! Refreshing...");
       setSelected([]);
       loadTokens();
     } catch (e: any) {
@@ -159,7 +175,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
       <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
-
       <p className="text-sm text-gray-400 mb-4 text-center">
         {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
@@ -220,7 +235,6 @@ export default function HomePage() {
           >
             Burn {selected.length > 0 && `(${selected.length})`}
           </button>
-
           <button
             onClick={loadTokens}
             className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]"
