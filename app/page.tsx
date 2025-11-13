@@ -1,33 +1,18 @@
-import type { Metadata } from "next";
+"use client";
 
-export const metadata: Metadata = {
-  title: "PUBS BURN",
-  other: {
-    "fc:miniapp": JSON.stringify({
-      version: "1",
-      imageUrl: "https://pubs-burn.vercel.app/image.png",
-      button: {
-        title: "Open PUBS BURN",
-        action: {
-          type: "launch_app",
-          name: "PUBS BURN",
-          url: "https://pubs-burn.vercel.app/miniapp",
-        },
-      },
-    }),
-  },
-};
+import { useEffect } from "react";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 export default function Home() {
-  return (
-    <main style={{ padding: 32, color: "white" }}>
-      PUBS BURN — Tap the link below to open Mini App <br /><br />
-      <a
-        href="/miniapp"
-        style={{ color: "#00FF3C", fontWeight: "bold" }}
-      >
-        👉 Open Miniapp
-      </a>
-    </main>
-  );
+  // WAJIB: panggil ready() di root
+  useEffect(() => {
+    sdk.actions.ready();
+  }, []);
+
+  // redirect manual, TAPI pakai client navigation
+  useEffect(() => {
+    window.location.href = "/miniapp";
+  }, []);
+
+  return <div style={{ color: "white", padding: 32 }}>Loading...</div>;
 }
