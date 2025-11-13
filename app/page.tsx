@@ -24,8 +24,6 @@ export default function HomePage() {
   const [overlayLoading, setOverlayLoading] = useState(false);
   const [overlayMessage, setOverlayMessage] = useState("");
   const [overlaySuccess, setOverlaySuccess] = useState("");
-
-  // 🔥 overlay transparan anti blank putih
   const [showWalletOverlay, setShowWalletOverlay] = useState(false);
 
   useEffect(() => {
@@ -39,108 +37,100 @@ export default function HomePage() {
   }, [isConnected, address]);
 
   const loadTokens = async () => {
-  if (!address) return;
+    if (!address) return;
 
-  const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
-  if (!key) return setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum diisi");
+    const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
+    if (!key) return setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum diisi");
 
-  setStatus("⏳ Scanning tokens...");
+    setStatus("⏳ Scanning tokens...");
 
-  try {
-    // 1️⃣ Ambil Balance dulu → super cepat
-    const res = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        id: 1,
-        jsonrpc: "2.0",
-        method: "alchemy_getTokenBalances",
-        params: [address],
-      }),
-    });
-
-    const data = await res.json();
-    const list = data?.result?.tokenBalances ?? [];
-
-    // Ambil token yang ada balance saja
-    let baseList = list
-      .filter((t: any) => BigInt(t.tokenBalance) > 0n)
-      .map((t: any) => ({
-        address: t.contractAddress,
-        rawBalance: BigInt(t.tokenBalance),
-        name: "Loading...",
-        symbol: "",
-        decimals: 18,
-        balance: "0",
-        logoUrl: "/token.png",
-        price: null,
-        isScam: false,
-      }));
-
-    // TAMPILKAN TOKEN SEGERA TANPA HARUS NUNGGU SEMUA METADATA
-    setTokens(baseList);
-    setStatus("🟢 Select token");
-
-    // 2️⃣ Load metadata & harga di background (tidak block UI)
-   baseList.forEach(async (token: any, i: number) => {
-      try {
-        // Metadata
-        const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            id: 2,
-            jsonrpc: "2.0",
-            method: "alchemy_getTokenMetadata",
-            params: [token.address],
-          }),
-        });
-
-        const meta = await metaRes.json();
-        const r = meta?.result;
-
-        if (r) {
-          token.decimals = r.decimals ?? 18;
-          token.name = r.name || r.symbol || "Token";
-          token.symbol = r.symbol || "";
-          token.logoUrl = r.logo || "/token.png";
-          token.balance = ethers.formatUnits(token.rawBalance, token.decimals);
-        }
-
-        // Harga dari Dexscreener (tidak wajib)
-        try {
-          const priceRes = await fetch(
-            `https://api.dexscreener.com/latest/dex/tokens/${token.address}`
-          );
-          const priceJ = await priceRes.json();
-
-          token.price = priceJ?.pairs?.[0]?.priceUsd ?? null;
-
-          const img = priceJ?.pairs?.[0]?.info?.imageUrl;
-          if (img) token.logoUrl = img;
-
-          token.isScam = !token.price || Number(token.price) === 0;
-        } catch {
-          token.price = null;
-        }
-      } catch {}
-
-      // update UI per token (cepat banget)
-      setTokens((prev) => {
-        const updated = [...prev];
-        updated[i] = { ...token };
-        return updated;
+    try {
+      const res = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "alchemy_getTokenBalances",
+          params: [address],
+        }),
       });
-    });
-  } catch (err) {
-    console.error("SCAN ERROR:", err);
-    setStatus("❌ Failed to scan tokens");
-  }
-};
 
+      const data = await res.json();
+      const list = data?.result?.tokenBalances ?? [];
+
+      let baseList = list
+        .filter((t: any) => BigInt(t.tokenBalance) > 0n)
+        .map((t: any) => ({
+          address: t.contractAddress,
+          rawBalance: BigInt(t.tokenBalance),
+          name: "Loading...",
+          symbol: "",
+          decimals: 18,
+          balance: "0",
+          logoUrl: "/token.png",
+          price: null,
+          isScam: false,
+        }));
+
+      setTokens(baseList);
+      setStatus("🟢 Select token");
+
+      baseList.forEach(async (token: any, i: number) => {
+        try {
+          const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              id: 2,
+              jsonrpc: "2.0",
+              method: "alchemy_getTokenMetadata",
+              params: [token.address],
+            }),
+          });
+
+          const meta = await metaRes.json();
+          const r = meta?.result;
+
+          if (r) {
+            token.decimals = r.decimals ?? 18;
+            token.name = r.name || r.symbol || "Token";
+            token.symbol = r.symbol || "";
+            token.logoUrl = r.logo || "/token.png";
+            token.balance = ethers.formatUnits(token.rawBalance, token.decimals);
+          }
+
+          try {
+            const priceRes = await fetch(
+              `https://api.dexscreener.com/latest/dex/tokens/${token.address}`
+            );
+            const priceJ = await priceRes.json();
+
+            token.price = priceJ?.pairs?.[0]?.priceUsd ?? null;
+            const img = priceJ?.pairs?.[0]?.info?.imageUrl;
+            if (img) token.logoUrl = img;
+
+            token.isScam = !token.price || Number(token.price) === 0;
+          } catch {
+            token.price = null;
+          }
+        } catch {}
+
+        setTokens((prev) => {
+          const updated = [...prev];
+          updated[i] = { ...token };
+          return updated;
+        });
+      });
+    } catch (err) {
+      console.error("SCAN ERROR:", err);
+      setStatus("❌ Failed to scan tokens");
+    }
+  };
 
   const burn = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
+
     try {
       setStatus("🔥 Starting process...");
 
@@ -149,143 +139,113 @@ export default function HomePage() {
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
       const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
-      try {
-        for (const tokenAddress of selected) {
-          const row = tokens.find((t) => t.address === tokenAddress);
-          if (!row || row.rawBalance === 0n) continue;
+      for (const tokenAddress of selected) {
+        const row = tokens.find((t) => t.address === tokenAddress);
+        if (!row || row.rawBalance === 0n) continue;
 
-          const isApproved = approvedTokens.includes(tokenAddress);
-          if (!isApproved) {
-            try {
-              setStatus(`🧾 Approving ${row.symbol}...`);
+        const isApproved = approvedTokens.includes(tokenAddress);
 
-              // 🔥 Nyalakan overlay
-              setShowWalletOverlay(true);
-              setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
-              setOverlayLoading(true);
-
-              const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-
-              // 🚀 popup wallet muncul disini
-              const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
-                gasLimit: 200_000n,
-              });
-
-              // ubah pesan setelah popup diklik user
-              setOverlayMessage(`Confirming ${row.symbol} approval...`);
-
-              // tunggu blockchain
-              await rpc.waitForTransaction(tx.hash);
-
-              // selesai approve → tampilkan sukses
-              setOverlayLoading(false);
-              setOverlaySuccess(`${row.symbol} Approved!`);
-              setTimeout(() => setOverlaySuccess(""), 1200);
-
-              setApprovedTokens((prev) => [...prev, tokenAddress]);
-            } catch (err: any) {
-              console.error(err);
-
-              // ❗ kalau user cancel, matikan overlay
-              setOverlayLoading(false);
-              setShowWalletOverlay(false);
-              setOverlayMessage("");
-
-              if (err?.code === 4001) {
-                setStatus("User canceled approve");
-              } else {
-                setStatus("Approve failed");
-              }
-
-              continue; // lanjut token berikut / stop sesuai logic
-            }
-
-            // 🔥 Matikan overlay setelah approve selesai
-            setShowWalletOverlay(false);
-            setOverlayMessage("");
-
-            return;
-          }
-
-          // === STEP 2: Fee ===
-          let feeWei = 0n;
+        // ===== APPROVE =====
+        if (!isApproved) {
           try {
-            const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+            setStatus(`🧾 Approving ${row.symbol}...`);
 
-            // Pastikan fee selalu memenuhi syarat kontrak
-            feeWei = feeRequired;
-          } catch (err) {
-            console.error("Fee error, using fallback:", err);
-
-            // fallback aman (tidak boleh nol)
-            feeWei = ethers.parseUnits("0.0001", "ether");
-          }
-
-          // === STEP 3: Burn ===
-          try {
-            setStatus(`🔥 Burning ${row.symbol}...`);
-
-            // --- popup muncul ---
             setShowWalletOverlay(true);
-            setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
+            setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
             setOverlayLoading(true);
 
-            const iface = new ethers.Interface(ABI);
-            const data = iface.encodeFunctionData("burnToken", [
-              row.address,
-              row.rawBalance,
-              JSON.stringify({ safe: true }),
-            ]);
+            const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
 
-            const tx = await signer.sendTransaction({
-              to: CONTRACT,
-              data,
-              value: feeWei, // fee benar → tidak FEE_LOW
-              gasLimit: 350_000n,
+            const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
+              gasLimit: 200_000n,
             });
 
-            setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
+            setOverlayMessage(`Confirming ${row.symbol} approval...`);
             await rpc.waitForTransaction(tx.hash);
 
-            // --- sukses ---
             setOverlayLoading(false);
-            setOverlaySuccess(`${row.symbol} Burned!`);
+            setOverlaySuccess(`${row.symbol} Approved!`);
             setTimeout(() => setOverlaySuccess(""), 1200);
 
-            setStatus(`✅ Burned ${row.symbol} successfully!`);
+            setApprovedTokens((prev) => [...prev, tokenAddress]);
           } catch (err: any) {
             console.error(err);
-
             setOverlayLoading(false);
-            setOverlayMessage("");
             setShowWalletOverlay(false);
+            setOverlayMessage("");
 
-            if (err?.code === 4001) {
-              setStatus("User canceled burn");
-            } else {
-              setStatus("Burn failed");
-            }
+            if (err?.code === 4001) setStatus("User canceled approve");
+            else setStatus("Approve failed");
 
-            // lanjut token berikutnya
+            continue;
           }
 
-          // selesai burn token ini → matikan overlay
           setShowWalletOverlay(false);
           setOverlayMessage("");
-        } // end for
 
-        // =========================================================
-        // 🔄 RESET SETELAH SEMUA TOKEN SELESAI DIBURN
-        // =========================================================
-        setApprovedTokens([]); // tombol kembali menjadi "Approve Selected"
-        setSelected([]); // reset pilihan token
-        await loadTokens(); // refresh daftar token setelah burn berhasil
-        setStatus("🎉 All selected tokens burned successfully!");
-      } catch (e: any) {
-        console.error(e);
+          return; // stop → user harus klik burn lagi
+        }
+
+        // ===== FEE =====
+        let feeWei = 0n;
+        try {
+          const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+          feeWei = feeRequired;
+        } catch {
+          feeWei = ethers.parseUnits("0.0001", "ether");
+        }
+
+        // ===== BURN =====
+        try {
+          setStatus(`🔥 Burning ${row.symbol}...`);
+
+          setShowWalletOverlay(true);
+          setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
+          setOverlayLoading(true);
+
+          const iface = new ethers.Interface(ABI);
+          const data = iface.encodeFunctionData("burnToken", [
+            row.address,
+            row.rawBalance,
+            JSON.stringify({ safe: true }),
+          ]);
+
+          const tx = await signer.sendTransaction({
+            to: CONTRACT,
+            data,
+            value: feeWei,
+            gasLimit: 350_000n,
+          });
+
+          setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
+          await rpc.waitForTransaction(tx.hash);
+
+          setOverlayLoading(false);
+          setOverlaySuccess(`${row.symbol} Burned!`);
+          setTimeout(() => setOverlaySuccess(""), 1200);
+
+          setStatus(`✅ Burned ${row.symbol} successfully!`);
+        } catch (err: any) {
+          console.error(err);
+          setOverlayLoading(false);
+          setOverlayMessage("");
+          setShowWalletOverlay(false);
+
+          if (err?.code === 4001) setStatus("User canceled burn");
+          else setStatus("Burn failed");
+
+          continue;
+        }
+
         setShowWalletOverlay(false);
-        setStatus("❌ Failed, try again.");
+        setOverlayMessage("");
       }
+
+      // ===== RESET =====
+      setApprovedTokens([]);
+      setSelected([]);
+      await loadTokens();
+      setStatus("🎉 All selected tokens burned successfully!");
     } catch (outerErr: any) {
       console.error(outerErr);
       setShowWalletOverlay(false);
@@ -304,7 +264,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
-      {/* 🔥 overlay transparan anti putih */}
       {showWalletOverlay && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[9999] pointer-events-none"></div>
       )}
@@ -319,10 +278,11 @@ export default function HomePage() {
           <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN 🚨</div>
           <button
             onClick={() =>
-              selected.length === tokens.length ? setSelected([]) : setSelected(tokens.map((t) => t.address))
+              selected.length === tokens.length
+                ? setSelected([])
+                : setSelected(tokens.map((t) => t.address))
             }
-            className="text-xs text-[#00FF3C]"
-          >
+            className="text-xs text-[#00FF3C]">
             {selected.length === tokens.length ? "Unselect All" : "Select All"}
           </button>
         </div>
@@ -334,17 +294,22 @@ export default function HomePage() {
               <button
                 key={t.address}
                 onClick={() =>
-                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
+                  setSelected(
+                    active ? selected.filter((x) => x !== t.address) : [...selected, t.address]
+                  )
                 }
-                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${active ? "bg-[#132A18]" : ""}`}
-              >
+                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${
+                  active ? "bg-[#132A18]" : ""
+                }`}>
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
                     {t.isScam && <span className="text-[10px] text-[#FF4A4A]">🚨</span>}
                   </div>
-                  <div className="text-xs text-gray-400 truncate">{t.symbol} • {Number(t.balance).toFixed(4)}</div>
+                  <div className="text-xs text-gray-400 truncate">
+                    {t.symbol} • {Number(t.balance).toFixed(4)}
+                  </div>
                 </div>
                 <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
                   {t.price ? `$${t.price}` : "0.00"}
@@ -361,25 +326,33 @@ export default function HomePage() {
           <button
             onClick={burn}
             className={`w-full py-3 rounded-xl font-bold ${
-              selected.every((s) => approvedTokens.includes(s)) ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black" : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
-            }`}
-          >
-            {selected.length === 0 ? "Select token first" : selected.every((s) => approvedTokens.includes(s)) ? `Burn Now (${selected.length})` : `Approve Selected (${selected.length})`}
+              selected.every((s) => approvedTokens.includes(s))
+                ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black"
+                : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
+            }`}>
+            {selected.length === 0
+              ? "Select token first"
+              : selected.every((s) => approvedTokens.includes(s))
+              ? `Burn Now (${selected.length})`
+              : `Approve Selected (${selected.length})`}
           </button>
 
-          <button onClick={loadTokens} className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]">
+          <button
+            onClick={loadTokens}
+            className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]">
             Scan / Refresh Tokens
           </button>
         </div>
       </div>
 
       {lastBurnTx && (
-        <button onClick={shareWarpcast} className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black">
+        <button
+          onClick={shareWarpcast}
+          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black">
           📣 Share on Feed
         </button>
       )}
 
-      {/* LOADING OVERLAY */}
       {overlayLoading && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[999999]">
           <div className="flex flex-col items-center">
@@ -389,10 +362,11 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* SUCCESS OVERLAY */}
       {overlaySuccess && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999999]">
-          <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">{overlaySuccess}</div>
+          <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">
+            {overlaySuccess}
+          </div>
         </div>
       )}
 
