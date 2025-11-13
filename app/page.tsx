@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "PUBS BURN",
@@ -19,9 +20,5 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  return (
-    <main style={{ padding: 32, color: "white" }}>
-      PUBS BURN — Tap to open Mini App
-    </main>
-  );
+  redirect("/miniapp");
 }
