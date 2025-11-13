@@ -116,145 +116,149 @@ export default function HomePage() {
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
       const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
-      for (const tokenAddress of selected) {
-        const row = tokens.find((t) => t.address === tokenAddress);
-        if (!row || row.rawBalance === 0n) continue;
+      try {
+        for (const tokenAddress of selected) {
+          const row = tokens.find((t) => t.address === tokenAddress);
+          if (!row || row.rawBalance === 0n) continue;
 
-       const isApproved = approvedTokens.includes(tokenAddress);
-if (!isApproved) {
-  try {
-    setStatus(`🧾 Approving ${row.symbol}...`);
+          const isApproved = approvedTokens.includes(tokenAddress);
+          if (!isApproved) {
+            try {
+              setStatus(`🧾 Approving ${row.symbol}...`);
 
-    // 🔥 Nyalakan overlay
-    setShowWalletOverlay(true);
-    setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
-    setOverlayLoading(true);
+              // 🔥 Nyalakan overlay
+              setShowWalletOverlay(true);
+              setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
+              setOverlayLoading(true);
 
-    const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+              const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
 
-    // 🚀 popup wallet muncul disini
-    const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
-      gasLimit: 200_000n
-    });
+              // 🚀 popup wallet muncul disini
+              const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
+                gasLimit: 200_000n,
+              });
 
-    // ubah pesan setelah popup diklik user
-    setOverlayMessage(`Confirming ${row.symbol} approval...`);
+              // ubah pesan setelah popup diklik user
+              setOverlayMessage(`Confirming ${row.symbol} approval...`);
 
-    // tunggu blockchain
-    await rpc.waitForTransaction(tx.hash);
+              // tunggu blockchain
+              await rpc.waitForTransaction(tx.hash);
 
-    // selesai approve → tampilkan sukses
-    setOverlayLoading(false);
-    setOverlaySuccess(`${row.symbol} Approved!`);
-    setTimeout(() => setOverlaySuccess(""), 1200);
+              // selesai approve → tampilkan sukses
+              setOverlayLoading(false);
+              setOverlaySuccess(`${row.symbol} Approved!`);
+              setTimeout(() => setOverlaySuccess(""), 1200);
 
-    setApprovedTokens(prev => [...prev, tokenAddress]);
+              setApprovedTokens((prev) => [...prev, tokenAddress]);
+            } catch (err: any) {
+              console.error(err);
 
-  } catch (err: any) {
-    console.error(err);
+              // ❗ kalau user cancel, matikan overlay
+              setOverlayLoading(false);
+              setShowWalletOverlay(false);
+              setOverlayMessage("");
 
-    // ❗ kalau user cancel, matikan overlay
-    setOverlayLoading(false);
-    setShowWalletOverlay(false);
-    setOverlayMessage("");
+              if (err?.code === 4001) {
+                setStatus("User canceled approve");
+              } else {
+                setStatus("Approve failed");
+              }
 
-    if (err?.code === 4001) {
-      setStatus("User canceled approve");
-    } else {
-      setStatus("Approve failed");
-    }
+              continue; // lanjut token berikut / stop sesuai logic
+            }
 
-    continue; // lanjut token berikut / stop sesuai logic
-  }
+            // 🔥 Matikan overlay setelah approve selesai
+            setShowWalletOverlay(false);
+            setOverlayMessage("");
 
-  // 🔥 Matikan overlay setelah approve selesai
-  setShowWalletOverlay(false);
-  setOverlayMessage("");
+            continue;
+          }
 
-  continue;
-}
+          // === STEP 2: Fee ===
+          let feeWei = 0n;
+          try {
+            const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
 
-        // === STEP 2: Fee ===
-let feeWei = 0n;
-try {
-  const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+            // Pastikan fee selalu memenuhi syarat kontrak
+            feeWei = feeRequired;
+          } catch (err) {
+            console.error("Fee error, using fallback:", err);
 
-  // Pastikan fee selalu memenuhi syarat kontrak
-  feeWei = feeRequired;
+            // fallback aman (tidak boleh nol)
+            feeWei = ethers.parseUnits("0.0001", "ether");
+          }
 
-} catch (err) {
-  console.error("Fee error, using fallback:", err);
+          // === STEP 3: Burn ===
+          try {
+            setStatus(`🔥 Burning ${row.symbol}...`);
 
-  // fallback aman (tidak boleh nol)
-  feeWei = ethers.parseUnits("0.0001", "ether");
-}
+            // --- popup muncul ---
+            setShowWalletOverlay(true);
+            setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
+            setOverlayLoading(true);
 
+            const iface = new ethers.Interface(ABI);
+            const data = iface.encodeFunctionData("burnToken", [
+              row.address,
+              row.rawBalance,
+              JSON.stringify({ safe: true }),
+            ]);
 
-// === STEP 3: Burn ===
-try {
-  setStatus(`🔥 Burning ${row.symbol}...`);
+            const tx = await signer.sendTransaction({
+              to: CONTRACT,
+              data,
+              value: feeWei, // fee benar → tidak FEE_LOW
+              gasLimit: 350_000n,
+            });
 
-  setShowWalletOverlay(true);
-  setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
-  setOverlayLoading(true);
+            setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
+            await rpc.waitForTransaction(tx.hash);
 
-  const iface = new ethers.Interface(ABI);
-  const data = iface.encodeFunctionData("burnToken", [
-    row.address,
-    row.rawBalance,
-    JSON.stringify({ safe: true }),
-  ]);
+            // --- sukses ---
+            setOverlayLoading(false);
+            setOverlaySuccess(`${row.symbol} Burned!`);
+            setTimeout(() => setOverlaySuccess(""), 1200);
 
-  // Kirim transaksi + fee yang benar
-  const tx = await signer.sendTransaction({
-    to: CONTRACT,
-    data,
-    value: feeWei,       // FEE SELALU BENAR → tidak FEE_LOW
-    gasLimit: 350_000n,
-  });
+            setStatus(`✅ Burned ${row.symbol} successfully!`);
+          } catch (err: any) {
+            console.error(err);
 
-  setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
-  await rpc.waitForTransaction(tx.hash);
+            setOverlayLoading(false);
+            setOverlayMessage("");
+            setShowWalletOverlay(false);
 
-  setOverlayLoading(false);
-  setOverlaySuccess(`${row.symbol} Burned!`);
-  setTimeout(() => setOverlaySuccess(""), 1200);
+            if (err?.code === 4001) {
+              setStatus("User canceled burn");
+            } else {
+              setStatus("Burn failed");
+            }
 
-  setStatus(`✅ Burned ${row.symbol} successfully!`);
+            continue; // lanjut token berikutnya
+          }
 
+          // selesai burn token ini → matikan overlay
+          setShowWalletOverlay(false);
+          setOverlayMessage("");
+        } // end for
 
-      } catch (err: any) {
-        console.error(err);
-
-        setOverlayLoading(false);
-        setOverlayMessage("");
+        // =========================================================
+        // 🔄 RESET SETELAH SEMUA TOKEN SELESAI DIBURN
+        // =========================================================
+        setApprovedTokens([]); // tombol kembali menjadi "Approve Selected"
+        setSelected([]); // reset pilihan token
+        await loadTokens(); // refresh daftar token setelah burn berhasil
+        setStatus("🎉 All selected tokens burned successfully!");
+      } catch (e: any) {
+        console.error(e);
         setShowWalletOverlay(false);
-
-        if (err?.code === 4001) {
-          setStatus("User canceled burn");
-        } else {
-          setStatus("Burn failed");
-        }
-        continue;
+        setStatus("❌ Failed, try again.");
       }
-
+    } catch (outerErr: any) {
+      console.error(outerErr);
       setShowWalletOverlay(false);
-      setOverlayMessage("");
+      setStatus("❌ Failed, try again.");
     }
-
-    // ======================================
-    // 🔄 RESET SETELAH SEMUA TOKEN SELESAI
-    // ======================================
-    setApprovedTokens([]);
-    setSelected([]);
-
-    loadTokens();
-  } catch (e: any) {
-    console.error(e);
-    setShowWalletOverlay(false);
-    setStatus("❌ Failed, try again.");
-  }
-};
+  };
 
   const shareWarpcast = () => {
     if (!lastBurnTx) return;
@@ -267,7 +271,6 @@ try {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
-
       {/* 🔥 overlay transparan anti putih */}
       {showWalletOverlay && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[9999] pointer-events-none"></div>
@@ -279,14 +282,11 @@ try {
       </p>
 
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
-
         <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111] sticky top-0 z-10">
           <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN 🚨</div>
           <button
             onClick={() =>
-              selected.length === tokens.length
-                ? setSelected([])
-                : setSelected(tokens.map((t) => t.address))
+              selected.length === tokens.length ? setSelected([]) : setSelected(tokens.map((t) => t.address))
             }
             className="text-xs text-[#00FF3C]"
           >
@@ -303,9 +303,7 @@ try {
                 onClick={() =>
                   setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
                 }
-                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${
-                  active ? "bg-[#132A18]" : ""
-                }`}
+                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${active ? "bg-[#132A18]" : ""}`}
               >
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
                 <div className="flex-1 overflow-hidden">
@@ -313,9 +311,7 @@ try {
                     {t.name}
                     {t.isScam && <span className="text-[10px] text-[#FF4A4A]">🚨</span>}
                   </div>
-                  <div className="text-xs text-gray-400 truncate">
-                    {t.symbol} • {Number(t.balance).toFixed(4)}
-                  </div>
+                  <div className="text-xs text-gray-400 truncate">{t.symbol} • {Number(t.balance).toFixed(4)}</div>
                 </div>
                 <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
                   {t.price ? `$${t.price}` : "0.00"}
@@ -329,59 +325,44 @@ try {
         </div>
 
         <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
-
           <button
             onClick={burn}
-            className={`w-full py-3 rounded-xl font-bold
-              ${
-                selected.every((s) => approvedTokens.includes(s))
-                  ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black"
-                  : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
-              }
-            `}
+            className={`w-full py-3 rounded-xl font-bold ${
+              selected.every((s) => approvedTokens.includes(s)) ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black" : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
+            }`}
           >
-            {selected.length === 0
-              ? "Select token first"
-              : selected.every((s) => approvedTokens.includes(s))
-                ? `Burn Now (${selected.length})`
-                : `Approve Selected (${selected.length})`}
+            {selected.length === 0 ? "Select token first" : selected.every((s) => approvedTokens.includes(s)) ? `Burn Now (${selected.length})` : `Approve Selected (${selected.length})`}
           </button>
 
-          <button
-            onClick={loadTokens}
-            className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]"
-          >
+          <button onClick={loadTokens} className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]">
             Scan / Refresh Tokens
           </button>
         </div>
       </div>
 
       {lastBurnTx && (
-        <button
-          onClick={shareWarpcast}
-          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black"
-        >
+        <button onClick={shareWarpcast} className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black">
           📣 Share on Feed
         </button>
       )}
-{/* LOADING OVERLAY */}
-{overlayLoading && (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[999999]">
-    <div className="flex flex-col items-center">
-      <div className="h-12 w-12 border-4 border-gray-300 border-t-[#00FF3C] rounded-full animate-spin"></div>
-      <p className="mt-4 text-white text-sm">{overlayMessage}</p>
-    </div>
-  </div>
-)}
 
-{/* SUCCESS OVERLAY */}
-{overlaySuccess && (
-  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999999]">
-    <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">
-      {overlaySuccess}
-    </div>
-  </div>
-)}
+      {/* LOADING OVERLAY */}
+      {overlayLoading && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[999999]">
+          <div className="flex flex-col items-center">
+            <div className="h-12 w-12 border-4 border-gray-300 border-t-[#00FF3C] rounded-full animate-spin"></div>
+            <p className="mt-4 text-white text-sm">{overlayMessage}</p>
+          </div>
+        </div>
+      )}
+
+      {/* SUCCESS OVERLAY */}
+      {overlaySuccess && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999999]">
+          <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">{overlaySuccess}</div>
+        </div>
+      )}
+
       <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
     </div>
   );
