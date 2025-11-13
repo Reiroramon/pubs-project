@@ -108,66 +108,42 @@ export default function HomePage() {
     }
   };
 
-  // APPROVE single token (tile clickable - MODE B)
-  const approveSingleToken = async (token: any) => {
-    if (!token || !token.address) return;
-    // prevent approving zero balance
-    if (token.rawBalance === 0n) {
-      setStatus("Token balance is 0 — cannot approve");
-      return;
+ const approveSingleToken = async (token: any) => {
+  try {
+    setStatus(`Requesting approve for ${token.symbol}...`);
+
+    // ✔ signer dari Farcaster miniapp (bukan BrowserProvider)
+    const signer = await (sdk as any).wallet.getSigner();
+
+    // RPC publik hanya untuk menunggu tx selesai
+    const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
+
+    const tokenContract = new ethers.Contract(token.address, ERC20_ABI, signer);
+
+    // 🚀 ini yang memicu popup wallet (HARUS JALAN sekarang)
+    const tx = await tokenContract.approve(CONTRACT, token.rawBalance);
+
+    setStatus(`Waiting for confirmation...`);
+    await rpc.waitForTransaction(tx.hash);
+
+    setApprovedTokens((prev) => [...prev, token.address]);
+    setStatus(`Approved ${token.symbol}`);
+  } catch (err: any) {
+    console.error(err);
+    if (err?.code === 4001) {
+      setStatus("User rejected approval");
+    } else {
+      setStatus("Approve failed");
     }
-
-    try {
-      setStatus(`Requesting approve for ${token.symbol}...`);
-      // Provider & signer via Farcaster wallet (same as used elsewhere)
-      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
-      const signer = await provider.getSigner();
-      const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
-
-      // small delay helps avoid provider race conditions
-      await new Promise((r) => setTimeout(r, 220));
-
-      const tokenContract = new ethers.Contract(token.address, ERC20_ABI, signer);
-
-      // call approve -> this should open the wallet popup
-      const tx = await tokenContract.approve(CONTRACT, token.rawBalance);
-
-      setStatus(`Waiting wallet confirmation for ${token.symbol}...`);
-      await rpc.waitForTransaction(tx.hash);
-
-      // mark approved
-      setApprovedTokens((prev) => {
-        const next = prev.includes(token.address) ? prev : [...prev, token.address];
-        // if all selected are approved => auto close popup
-        const allApproved = selected.every((addr) => next.includes(addr));
-        if (allApproved) {
-          setShowApprovePopup(false);
-          setStatus("All tokens approved — you can now Burn.");
-        } else {
-          setStatus(`Approved ${token.symbol}`);
-        }
-        return next;
-      });
-    } catch (err: any) {
-      console.error("approve error:", err);
-      // Do NOT auto-close popup on wallet reject; keep popup open so user can retry
-      // If you want to auto-close on cancel, change this to setShowApprovePopup(false)
-      if (err?.code === 4001 || (err && /user rejected|User denied/i.test(err.message || ""))) {
-        setStatus("User rejected approval — you can retry or Cancel");
-      } else {
-        setStatus("Approve canceled or failed");
-      }
-      // keep popup open (user can retry)
-    }
-  };
+  }
+};
 
   // BURN all selected (called after user confirm in Burn popup)
   const burnAll = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
     try {
       setStatus("🔥 Starting burn process...");
-      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
-      const signer = await provider.getSigner();
+      const signer = await (sdk as any).wallet.getSigner();
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
       const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
