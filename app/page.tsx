@@ -208,11 +208,21 @@ try {
   await rpc.waitForTransaction(tx.hash);
 
   // --- sukses ---
-  setOverlayLoading(false);
-  setOverlaySuccess(`${row.symbol} Burned!`);
-  setTimeout(() => setOverlaySuccess(""), 1200);
+  // --- sukses ---
+setOverlayLoading(false);
+setOverlaySuccess(`${row.symbol} Burned!`);
 
-  setStatus(`✅ Burned ${row.symbol} successfully!`);
+// AUTO REFRESH setelah burn success
+setTimeout(async () => {
+  setOverlaySuccess("");
+
+  await loadTokens();      // refresh token list
+  setSelected([]);         // reset pilihan user
+  setApprovedTokens([]);   // reset approved token list
+
+  setStatus("🟢 Select token");  // status kembali ke awal
+}, 1200);
+
 
 } catch (err: any) {
   console.error(err);
