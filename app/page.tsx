@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+// META WAJIB ADA DI SINI
 export const metadata: Metadata = {
   title: "PUBS BURN",
   other: {
@@ -15,10 +16,11 @@ export const metadata: Metadata = {
           url: "https://pubs-burn.vercel.app/miniapp"
         }
       }
-    })
-  }
+    }),
+  },
 };
 
+// HALAMAN INI HARUS RETURN redirect server-side
 export default function Home() {
   redirect("/miniapp");
 }
