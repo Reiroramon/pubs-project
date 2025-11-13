@@ -21,6 +21,9 @@ export default function HomePage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
   const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
+  const [overlayLoading, setOverlayLoading] = useState(false);
+  const [overlayMessage, setOverlayMessage] = useState("");
+  const [overlaySuccess, setOverlaySuccess] = useState("");
 
   // 🔥 overlay transparan anti blank putih
   const [showWalletOverlay, setShowWalletOverlay] = useState(false);
@@ -125,7 +128,19 @@ export default function HomePage() {
           setShowWalletOverlay(true);
 
           const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-          const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
+         setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
+setOverlayLoading(true);
+
+const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
+
+setOverlayMessage(`Waiting confirmation for ${row.symbol}...`);
+
+await rpc.waitForTransaction(tx.hash);
+
+setOverlayLoading(false);
+setOverlaySuccess(`${row.symbol} Approved!`);
+setTimeout(() => setOverlaySuccess(""), 1200);
+
 
           setStatus(`⏳ Waiting for ${row.symbol} approval...`);
           await rpc.waitForTransaction(tx.hash);
@@ -157,12 +172,24 @@ export default function HomePage() {
         // 🔥 aktifkan overlay saat popup wallet burn muncul
         setShowWalletOverlay(true);
 
-        const tx = await signer.sendTransaction({
-          to: CONTRACT,
-          data,
-          value: feeWei,
-          gasLimit: 350_000n,
-        });
+       setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
+setOverlayLoading(true);
+
+const tx = await signer.sendTransaction({
+  to: CONTRACT,
+  data,
+  value: feeWei,
+  gasLimit: 350_000n,
+});
+
+setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
+
+await rpc.waitForTransaction(tx.hash);
+
+setOverlayLoading(false);
+setOverlaySuccess(`${row.symbol} Burned!`);
+setTimeout(() => setOverlaySuccess(""), 1200);
+
 
         setStatus(`⏳ Waiting for ${row.symbol} burn...`);
         await rpc.waitForTransaction(tx.hash);
@@ -289,6 +316,24 @@ export default function HomePage() {
           📣 Share on Feed
         </button>
       )}
+{/* LOADING OVERLAY */}
+{overlayLoading && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[999999]">
+    <div className="flex flex-col items-center">
+      <div className="h-12 w-12 border-4 border-gray-300 border-t-[#00FF3C] rounded-full animate-spin"></div>
+      <p className="mt-4 text-white text-sm">{overlayMessage}</p>
+    </div>
+  </div>
+)}
+
+{/* SUCCESS OVERLAY */}
+{overlaySuccess && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999999]">
+    <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">
+      {overlaySuccess}
+    </div>
+  </div>
+)}
 
       <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
     </div>
