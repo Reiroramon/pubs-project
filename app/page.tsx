@@ -157,7 +157,7 @@ setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
         row.rawBalance,
         JSON.stringify({ safe: true }),
       ]);
-
+      setShowOverlay(true);
       const tx = await signer.sendTransaction({
         to: CONTRACT,
         data,
@@ -167,6 +167,7 @@ setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
 
       setStatus(`⏳ Waiting for ${row.symbol} burn...`);
       await rpc.waitForTransaction(tx.hash); // ✅ gunakan RPC publik untuk tunggu receipt
+      setShowOverlay(false);
       setStatus(`✅ Burned ${row.symbol} successfully!`);
     }
 
@@ -282,7 +283,23 @@ setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
           📣 Share on Feed
         </button>
       )}
+{/* 🔵 [TAMBAH — LOADING OVERLAY] */}
+{showOverlay && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="text-center text-white text-lg animate-pulse">
+      Processing...
+    </div>
+  </div>
+)}
 
+{/* 🔵 [TAMBAH — SUCCESS POPUP] */}
+{showSuccess && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="px-6 py-4 bg-white/10 border border-[#00FF3C50] rounded-xl text-[#00FF3C] text-lg font-bold shadow-lg backdrop-blur-lg">
+      ✓ Approve Success
+    </div>
+  </div>
+)}
       <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
     </div>
   );
