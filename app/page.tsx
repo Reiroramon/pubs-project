@@ -111,53 +111,59 @@ const contract = new ethers.Contract(CONTRACT, ABI, signer);
 // ✅ Provider publik (untuk tunggu receipt)
 const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
+// 1) APPROVE ALL TOKENS
 for (const tokenAddress of selected) {
-const row = tokens.find((t) => t.address === tokenAddress);
-if (!row || row.rawBalance === 0n) continue;
+  const row = tokens.find((t) => t.address === tokenAddress);
+  if (!row || row.rawBalance === 0n) continue;
 
-// === STEP 1: Approve ===
-const isApproved = approvedTokens.includes(tokenAddress);
-if (!isApproved) {
-setStatus(`🧾 Approving ${row.symbol}...`);
-const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
-setStatus(`⏳ Waiting for ${row.symbol} approval...`);
-await rpc.waitForTransaction(tx.hash); // ✅ gunakan rpc publik
-setApprovedTokens((prev) => [...prev, tokenAddress]);
-setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
-continue;
+  const isApproved = approvedTokens.includes(tokenAddress);
+  if (!isApproved) {
+    setStatus(`🧾 Approving ${row.symbol}...`);
+
+    const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+    const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
+      gasLimit: 200_000n,
+    });
+
+    await rpc.waitForTransaction(tx.hash);
+    setApprovedTokens((prev) => [...prev, tokenAddress]);
+
+    setStatus(`✅ Approved ${row.symbol}`);
+    await new Promise((res) => setTimeout(res, 250));
+  }
+}
+// 2) BURN ALL APPROVED TOKENS
+for (const tokenAddress of selected) {
+  const row = tokens.find((t) => t.address === tokenAddress);
+  if (!row || row.rawBalance === 0n) continue;
+
+  setStatus(`🔥 Burning ${row.symbol}...`);
+
+  let feeWei = ethers.parseUnits("0.0001", "ether");
+  try {
+    const [f] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+    if (f && f > 0n) feeWei = f;
+  } catch {}
+
+  const iface = new ethers.Interface(ABI);
+  const data = iface.encodeFunctionData("burnToken", [
+    row.address,
+    row.rawBalance,
+    JSON.stringify({ safe: true }),
+  ]);
+
+  const tx = await signer.sendTransaction({
+    to: CONTRACT,
+    data,
+    value: feeWei,
+    gasLimit: 350_000n,
+  });
+
+  await rpc.waitForTransaction(tx.hash);
+  setStatus(`✅ Burned ${row.symbol}`);
+  await new Promise((res) => setTimeout(res, 250));
 }
 
-// === STEP 2: Fee ===
-let feeWei = ethers.parseUnits("0.0001", "ether");
-try {
-const [f] = await contract.quoteErc20Fee(row.address, row.rawBalance);
-if (f && f > 0n) feeWei = f;
-} catch {
-console.warn("⚠️ Using fallback fee");
-}
-
-// === STEP 3: Burn ===
-      setStatus(`🔥 Burning ${row.symbol}... Confirm in wallet.`);
-      setStatus(`🔥 Burning ${row.symbol}...`);
-const iface = new ethers.Interface(ABI);
-const data = iface.encodeFunctionData("burnToken", [
-row.address,
-row.rawBalance,
-JSON.stringify({ safe: true }),
-]);
-
-const tx = await signer.sendTransaction({
-to: CONTRACT,
-data,
-value: feeWei,
-gasLimit: 350_000n,
-});
-
-setStatus(`⏳ Waiting for ${row.symbol} burn...`);
-await rpc.waitForTransaction(tx.hash); // ✅ gunakan RPC publik untuk tunggu receipt
-setStatus(`✅ Burned ${row.symbol} successfully!`);
-}
 
 loadTokens();
 } catch (e: any) {
