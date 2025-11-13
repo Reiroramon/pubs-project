@@ -322,61 +322,62 @@ export default function HomePage() {
       </div>
 
       {/* === APPROVE BOTTOM SHEET (KONDO STYLE, TILE LIST) === */}
-      {showApprovePopup && (
-        <>
-          {/* backdrop */}
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 pointer-events-none" />
-          {/* sheet */}
-          <div className="fixed inset-0 flex flex-col justify-end z-50 pointer-events-none">
-            <div className="pointer-events-auto w-full h-[50vh] bg-[#111] rounded-t-3xl p-5 border-t border-[#00FF3C40] shadow-xl overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-[#00FF3C] text-lg font-bold">Approve Tokens</h2>
-                  <div className="text-xs text-gray-400">Tap a token to approve (one-by-one)</div>
-                </div>
-                <button
-                  onClick={() => setShowApprovePopup(false)}
-                  className="text-gray-300 text-sm"
-                >
-                  Close
-                </button>
+      {/* APPROVE BOTTOM SHEET */}
+{showApprovePopup && (
+  <>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" />
+
+    <div className="fixed inset-0 flex flex-col justify-end z-50">
+      <div className="w-full h-[50vh] bg-[#111] rounded-t-3xl p-5 border-t border-[#00FF3C40] shadow-xl overflow-y-auto">
+
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-[#00FF3C] text-lg font-bold">Approve Tokens</h2>
+            <div className="text-xs text-gray-400">Tap to approve (one by one)</div>
+          </div>
+          <button onClick={() => setShowApprovePopup(false)} className="text-gray-300 text-sm">Close</button>
+        </div>
+
+        <div className="space-y-3">
+          {tokensToApprove.map((t) => (
+            <div
+              key={t.address}
+              onClick={() => !approvedTokens.includes(t.address) && approveSingleToken(t)}
+              className={`flex items-center p-3 rounded-2xl cursor-pointer transition border
+                ${approvedTokens.includes(t.address)
+                  ? "bg-[#0F0F0F] border-[#00FF3C40] opacity-70"
+                  : "bg-[#1A1A1A] border-[#333] hover:border-[#00FF3C]"
+                }`}
+            >
+              <img src={t.logoUrl} className="w-10 h-10 rounded-full mr-3" />
+              <div className="flex-1 min-w-0">
+                <div className="text-white font-semibold truncate">{t.symbol}</div>
+                <div className="text-gray-400 text-xs truncate">{t.name}</div>
               </div>
 
-              <div className="space-y-3">
-                {tokensToApprove.map((t) => (
-                  <div
-                    key={t.address}
-                    onClick={() => !approvedTokens.includes(t.address) && approveSingleToken(t)}
-                    className={`flex items-center p-3 rounded-2xl cursor-pointer transition border ${
-                      approvedTokens.includes(t.address)
-                        ? "bg-[#0F0F0F] border-[#00FF3C40] opacity-70"
-                        : "bg-[#1A1A1A] border-[#333] hover:border-[#00FF3C]"
-                    }`}
-                  >
-                    <img src={t.logoUrl} className="w-10 h-10 rounded-full mr-3" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-white font-semibold truncate">{t.symbol}</div>
-                      <div className="text-gray-400 text-xs truncate">{t.name}</div>
-                    </div>
-                    <div className={`px-3 py-1 rounded-lg text-sm ${approvedTokens.includes(t.address) ? "bg-gray-700 text-gray-300" : "bg-[#00FF3C] text-black"}`}>
-                      {approvedTokens.includes(t.address) ? "Approved" : "Approve"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5">
-                <button
-                  className="w-full py-3 bg-[#333] text-white rounded-xl"
-                  onClick={() => setShowApprovePopup(false)}
-                >
-                  Cancel
-                </button>
+              <div className={`px-3 py-1 rounded-lg text-sm 
+                ${approvedTokens.includes(t.address)
+                  ? "bg-gray-700 text-gray-300"
+                  : "bg-[#00FF3C] text-black"
+                }`}
+              >
+                {approvedTokens.includes(t.address) ? "Approved" : "Approve"}
               </div>
             </div>
-          </div>
-        </>
-      )}
+          ))}
+        </div>
+
+        <button className="w-full py-3 bg-[#333] text-white rounded-xl mt-5"
+          onClick={() => setShowApprovePopup(false)}
+        >
+          Cancel
+        </button>
+
+      </div>
+    </div>
+  </>
+)}
+
 
       {/* === BURN BOTTOM SHEET (KONDO STYLE) === */}
       {showBurnPopup && (
