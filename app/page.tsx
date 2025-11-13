@@ -1,26 +1,36 @@
-"use client";
+import type { Metadata } from "next";
 
-import { useEffect } from "react";
-import { sdk } from "@farcaster/miniapp-sdk";
+export const metadata: Metadata = {
+  title: "PUBS BURN",
+  other: {
+    "fc:miniapp": JSON.stringify({
+      version: "1",
+      imageUrl: "https://pubs-burn.vercel.app/image.png",
+      button: {
+        title: "Open PUBS BURN",
+        action: {
+          type: "launch_app",
+          name: "PUBS BURN",
+          url: "https://pubs-burn.vercel.app/miniapp"
+        }
+      }
+    })
+  }
+};
 
 export default function Home() {
-  useEffect(() => {
-    // untuk menghilangkan splash screen kalau dibuka di miniapps
-    sdk.actions.ready();
-  }, []);
-
   return (
-    <div
+    <main
       style={{
         color: "white",
-        padding: "32px",
+        padding: 32,
         textAlign: "center",
         background: "#000",
         minHeight: "100vh",
       }}
     >
       <h1 style={{ fontSize: 32, marginBottom: 16 }}>PUBS BURN</h1>
-      <p>Burn scam tokens in one tap.</p>
+      <p>Burn scam tokens instantly.</p>
 
       <a
         href="/miniapp"
@@ -36,6 +46,6 @@ export default function Home() {
       >
         Open Miniapp
       </a>
-    </div>
+    </main>
   );
 }
