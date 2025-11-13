@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "PUBS BURN",
@@ -19,33 +20,5 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  return (
-    <main
-      style={{
-        color: "white",
-        padding: 32,
-        textAlign: "center",
-        background: "#000",
-        minHeight: "100vh",
-      }}
-    >
-      <h1 style={{ fontSize: 32, marginBottom: 16 }}>PUBS BURN</h1>
-      <p>Burn scam tokens instantly.</p>
-
-      <a
-        href="/miniapp"
-        style={{
-          display: "inline-block",
-          marginTop: 24,
-          padding: "12px 20px",
-          background: "#00FF3C",
-          color: "#000",
-          borderRadius: 12,
-          fontWeight: "bold",
-        }}
-      >
-        Open Miniapp
-      </a>
-    </main>
-  );
+  redirect("/miniapp");
 }
