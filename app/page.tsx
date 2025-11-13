@@ -222,35 +222,39 @@ try {
 
   setStatus(`✅ Burned ${row.symbol} successfully!`);
 
-} catch (err: any) {
-  console.error(err);
+ setApprovedTokens([]);
+      } catch (err: any) {
+        console.error(err);
 
-  setOverlayLoading(false);
-  setOverlayMessage("");
-  setShowWalletOverlay(false);
+        setOverlayLoading(false);
+        setOverlayMessage("");
+        setShowWalletOverlay(false);
 
-  if (err?.code === 4001) {
-    setStatus("User canceled burn");
-  } else {
-    setStatus("Burn failed");
-  }
-
-  continue;
-}
-
-setShowWalletOverlay(false);
-setOverlayMessage("");
-
-
+        if (err?.code === 4001) {
+          setStatus("User canceled burn");
+        } else {
+          setStatus("Burn failed");
+        }
+        continue;
       }
 
-      loadTokens();
-    } catch (e: any) {
-      console.error(e);
-      setShowWalletOverlay(false); // pastikan overlay mati kalau error
-      setStatus("❌ Failed, try again.");
+      setShowWalletOverlay(false);
+      setOverlayMessage("");
     }
-  };
+
+    // ======================================
+    // 🔄 RESET SETELAH SEMUA TOKEN SELESAI
+    // ======================================
+    setApprovedTokens([]);
+    setSelected([]);
+
+    loadTokens();
+  } catch (e: any) {
+    console.error(e);
+    setShowWalletOverlay(false);
+    setStatus("❌ Failed, try again.");
+  }
+};
 
   const shareWarpcast = () => {
     if (!lastBurnTx) return;
