@@ -99,7 +99,7 @@ export default function HomePage() {
       );
 
       setTokens(final.filter((t) => Number(t.balance) > 0));
-      setStatus("✅ Ready to burn");
+      setStatus("🟢 Select token");
     } catch (err) {
       console.error(err);
       setStatus("❌ Failed to scan tokens");
@@ -197,11 +197,11 @@ try {
   ]);
 
   const tx = await signer.sendTransaction({
-    to: CONTRACT,
-    data,
-    value: feeWei,
-    gasLimit: 350_000n,
-  });
+          to: CONTRACT,
+          data,
+          value: feeWei,
+          gasLimit: 350_000n,
+        });
 
   // --- menunggu konfirmasi ---
   setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
@@ -270,7 +270,7 @@ setOverlayMessage("");
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
 
         <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111] sticky top-0 z-10">
-          <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN</div>
+          <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN 🚨</div>
           <button
             onClick={() =>
               selected.length === tokens.length
