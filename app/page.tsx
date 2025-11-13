@@ -222,7 +222,7 @@ try {
 
   setStatus(`✅ Burned ${row.symbol} successfully!`);
 
- setApprovedTokens([]);
+
       } catch (err: any) {
         console.error(err);
 
