@@ -174,17 +174,26 @@ if (!isApproved) {
   continue;
 }
 
-        let feeWei = ethers.parseUnits("0.0001", "ether");
-        try {
-          const [f] = await contract.quoteErc20Fee(row.address, row.rawBalance);
-          if (f && f > 0n) feeWei = f;
-        } catch {}
+        // === STEP 2: Fee ===
+let feeWei = 0n;
+try {
+  const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
 
-       // === STEP 3: Burn ===
+  // Pastikan fee selalu memenuhi syarat kontrak
+  feeWei = feeRequired;
+
+} catch (err) {
+  console.error("Fee error, using fallback:", err);
+
+  // fallback aman (tidak boleh nol)
+  feeWei = ethers.parseUnits("0.00005", "ether");
+}
+
+
+// === STEP 3: Burn ===
 try {
   setStatus(`🔥 Burning ${row.symbol}...`);
 
-  // --- popup muncul ---
   setShowWalletOverlay(true);
   setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
   setOverlayLoading(true);
@@ -196,38 +205,26 @@ try {
     JSON.stringify({ safe: true }),
   ]);
 
+  // Kirim transaksi + fee yang benar
   const tx = await signer.sendTransaction({
-          to: CONTRACT,
-          data,
-          value: feeWei,
-          gasLimit: 350_000n,
-        });
+    to: CONTRACT,
+    data,
+    value: feeWei,       // FEE SELALU BENAR → tidak FEE_LOW
+    gasLimit: 350_000n,
+  });
 
-  // --- menunggu konfirmasi ---
   setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
   await rpc.waitForTransaction(tx.hash);
 
-  // --- sukses ---
-  // --- sukses ---
-setOverlayLoading(false);
-setOverlaySuccess(`${row.symbol} Burned!`);
+  setOverlayLoading(false);
+  setOverlaySuccess(`${row.symbol} Burned!`);
+  setTimeout(() => setOverlaySuccess(""), 1200);
 
-// AUTO REFRESH setelah burn success
-setTimeout(async () => {
-  setOverlaySuccess("");
-
-  await loadTokens();      // refresh token list
-  setSelected([]);         // reset pilihan user
-  setApprovedTokens([]);   // reset approved token list
-
-  setStatus("🟢 Select token");  // status kembali ke awal
-}, 1200);
-
+  setStatus(`✅ Burned ${row.symbol} successfully!`);
 
 } catch (err: any) {
   console.error(err);
 
-  // matikan overlay jika user cancel
   setOverlayLoading(false);
   setOverlayMessage("");
   setShowWalletOverlay(false);
@@ -238,12 +235,12 @@ setTimeout(async () => {
     setStatus("Burn failed");
   }
 
-  continue; // lanjut ke token berikutnya
+  continue;
 }
 
-// selesai → matikan overlay
 setShowWalletOverlay(false);
 setOverlayMessage("");
+
 
       }
 
