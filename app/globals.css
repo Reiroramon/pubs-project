@@ -40,3 +40,17 @@ body {
   -ms-overflow-style: none; /* IE dan Edge */
   scrollbar-width: none; /* Firefox */
 }
+/* Hilangkan background putih Warpcast di belakang pop-up */
+html, body {
+  background: transparent !important;
+}
+
+#__next {
+  background: transparent !important;
+}
+
+/* Miniapp wrapper Warpcast */
+div:has(> .fc-mini-app-root),
+.fc-mini-app-root {
+  background: transparent !important;
+}
