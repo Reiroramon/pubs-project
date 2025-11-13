@@ -39,72 +39,113 @@ export default function HomePage() {
   }, [isConnected, address]);
 
   const loadTokens = async () => {
-    if (!address) return;
-    const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
-    if (!key) return setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum diisi");
+  if (!address) return;
 
-    setStatus("⏳ Scanning tokens...");
-    try {
-      const res = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id: 1,
-          jsonrpc: "2.0",
-          method: "alchemy_getTokenBalances",
-          params: [address],
-        }),
+  const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
+  if (!key) return setStatus("⚠️ NEXT_PUBLIC_ALCHEMY_KEY belum diisi");
+
+  setStatus("⏳ Scanning tokens...");
+
+  try {
+    // 1️⃣ Ambil semua balances
+    const res = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: 1,
+        jsonrpc: "2.0",
+        method: "alchemy_getTokenBalances",
+        params: [address],
+      }),
+    });
+
+    const data = await res.json();
+    const balances = data?.result?.tokenBalances ?? [];
+
+    // hanya token dengan balance > 0
+    const filtered = balances.filter((t: any) => BigInt(t.tokenBalance) > 0n);
+
+    const concurrency = 5; // ⚡ super cepat tapi tetap aman
+    const queue: any[] = [];
+    const result: any[] = [];
+
+    const processToken = async (t: any) => {
+      const contractAddress = t.contractAddress;
+      const rawBalance = BigInt(t.tokenBalance);
+
+      let decimals = 18;
+      let name = "Unknown";
+      let symbol = "TKN";
+      let logoUrl = "/token.png";
+      let price: any = null;
+
+      // Metadata
+      try {
+        const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: 2,
+            jsonrpc: "2.0",
+            method: "alchemy_getTokenMetadata",
+            params: [contractAddress],
+          }),
+        });
+
+        const meta = await metaRes.json();
+        if (meta?.result) {
+          decimals = meta.result.decimals ?? 18;
+          name = meta.result.name || meta.result.symbol || "Unknown";
+          symbol = meta.result.symbol || "TKN";
+          logoUrl = meta.result.logo || "/token.png";
+        }
+      } catch {}
+
+      // Format balance
+      let balance = "0.0";
+      try {
+        balance = ethers.formatUnits(rawBalance, decimals);
+      } catch {}
+
+      // Harga Dexscreener
+      try {
+        const priceRes = await fetch(
+          `https://api.dexscreener.com/latest/dex/tokens/${contractAddress}`
+        );
+        const j = await priceRes.json();
+        price = j?.pairs?.[0]?.priceUsd ?? null;
+
+        const img = j?.pairs?.[0]?.info?.imageUrl;
+        if (img) logoUrl = img;
+      } catch {}
+
+      result.push({
+        address: contractAddress,
+        name,
+        symbol,
+        decimals,
+        balance,
+        rawBalance,
+        logoUrl,
+        price,
+        isScam: !price || Number(price) === 0,
       });
-      const data = await res.json();
-      const list = data?.result?.tokenBalances ?? [];
+    };
 
-      const final = await Promise.all(
-        list.map(async (t: any) => {
-          const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: 2,
-              jsonrpc: "2.0",
-              method: "alchemy_getTokenMetadata",
-              params: [t.contractAddress],
-            }),
-          });
-          const meta = await metaRes.json();
-          const { decimals, name, symbol, logo } = meta?.result ?? {};
-          const decimalsSafe = decimals ?? 18;
-
-          const balance = ethers.formatUnits(t.tokenBalance, decimalsSafe);
-          const priceRes = await fetch(
-            `https://api.dexscreener.com/latest/dex/tokens/${t.contractAddress}`
-          )
-            .then((r) => r.json())
-            .catch(() => null);
-
-          const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
-          const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
-
-          return {
-            address: t.contractAddress,
-            name: name || symbol || "Unknown",
-            symbol: symbol || "TKN",
-            decimals: decimalsSafe,
-            balance,
-            rawBalance: BigInt(t.tokenBalance),
-            logoUrl,
-            price,
-            isScam: !price || Number(price) === 0,
-          };
-        })
-      );
-
-      setTokens(final.filter((t) => Number(t.balance) > 0));
-      setStatus("🟢 Select token");
-    } catch (err) {
-      console.error(err);
-      setStatus("❌ Failed to scan tokens");
+    // 2️⃣ PROSES DENGAN BATCH CONCURRENCY
+    for (let i = 0; i < filtered.length; i += concurrency) {
+      const batch = filtered.slice(i, i + concurrency);
+      await Promise.all(batch.map(processToken)); // ⚡ cepat, tetap aman
     }
-  };
+
+    setTokens(result);
+    setStatus("🟢 Select token");
+  } catch (err) {
+    console.error("SCAN ERROR:", err);
+    setStatus("❌ Failed to scan tokens");
+  }
+};
+
 
   const burn = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
