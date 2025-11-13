@@ -283,23 +283,17 @@ setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
           📣 Share on Feed
         </button>
       )}
-{/* 🔵 [TAMBAH — LOADING OVERLAY] */}
 {showOverlay && (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-    <div className="text-center text-white text-lg animate-pulse">
-      Processing...
-    </div>
-  </div>
+  <div className="absolute top-0 left-0 w-full h-[260px] bg-black/10 z-40 pointer-events-none" />
 )}
-
-{/* 🔵 [TAMBAH — SUCCESS POPUP] */}
 {showSuccess && (
-  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-    <div className="px-6 py-4 bg-white/10 border border-[#00FF3C50] rounded-xl text-[#00FF3C] text-lg font-bold shadow-lg backdrop-blur-lg">
+  <div className="absolute top-0 left-0 w-full h-[260px] flex items-center justify-center z-50 pointer-events-none">
+    <div className="px-4 py-2 bg-black/30 text-[#00FF3C] rounded-lg text-sm font-bold">
       ✓ Approve Success
     </div>
   </div>
 )}
+
       <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
     </div>
   );
