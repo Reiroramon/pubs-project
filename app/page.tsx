@@ -47,7 +47,7 @@ export default function HomePage() {
   setStatus("⏳ Scanning tokens...");
 
   try {
-    // 1️⃣ Ambil semua balances
+    // 1️⃣ Ambil Balance dulu → super cepat
     const res = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -60,27 +60,31 @@ export default function HomePage() {
     });
 
     const data = await res.json();
-    const balances = data?.result?.tokenBalances ?? [];
+    const list = data?.result?.tokenBalances ?? [];
 
-    // hanya token dengan balance > 0
-    const filtered = balances.filter((t: any) => BigInt(t.tokenBalance) > 0n);
+    // Ambil token yang ada balance saja
+    let baseList = list
+      .filter((t: any) => BigInt(t.tokenBalance) > 0n)
+      .map((t: any) => ({
+        address: t.contractAddress,
+        rawBalance: BigInt(t.tokenBalance),
+        name: "Loading...",
+        symbol: "",
+        decimals: 18,
+        balance: "0",
+        logoUrl: "/token.png",
+        price: null,
+        isScam: false,
+      }));
 
-    const concurrency = 5; // ⚡ super cepat tapi tetap aman
-    const queue: any[] = [];
-    const result: any[] = [];
+    // TAMPILKAN TOKEN SEGERA TANPA HARUS NUNGGU SEMUA METADATA
+    setTokens(baseList);
+    setStatus("🟢 Select token");
 
-    const processToken = async (t: any) => {
-      const contractAddress = t.contractAddress;
-      const rawBalance = BigInt(t.tokenBalance);
-
-      let decimals = 18;
-      let name = "Unknown";
-      let symbol = "TKN";
-      let logoUrl = "/token.png";
-      let price: any = null;
-
-      // Metadata
+    // 2️⃣ Load metadata & harga di background (tidak block UI)
+   baseList.forEach(async (token: any, i: number) => {
       try {
+        // Metadata
         const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -88,58 +92,46 @@ export default function HomePage() {
             id: 2,
             jsonrpc: "2.0",
             method: "alchemy_getTokenMetadata",
-            params: [contractAddress],
+            params: [token.address],
           }),
         });
 
         const meta = await metaRes.json();
-        if (meta?.result) {
-          decimals = meta.result.decimals ?? 18;
-          name = meta.result.name || meta.result.symbol || "Unknown";
-          symbol = meta.result.symbol || "TKN";
-          logoUrl = meta.result.logo || "/token.png";
+        const r = meta?.result;
+
+        if (r) {
+          token.decimals = r.decimals ?? 18;
+          token.name = r.name || r.symbol || "Token";
+          token.symbol = r.symbol || "";
+          token.logoUrl = r.logo || "/token.png";
+          token.balance = ethers.formatUnits(token.rawBalance, token.decimals);
+        }
+
+        // Harga dari Dexscreener (tidak wajib)
+        try {
+          const priceRes = await fetch(
+            `https://api.dexscreener.com/latest/dex/tokens/${token.address}`
+          );
+          const priceJ = await priceRes.json();
+
+          token.price = priceJ?.pairs?.[0]?.priceUsd ?? null;
+
+          const img = priceJ?.pairs?.[0]?.info?.imageUrl;
+          if (img) token.logoUrl = img;
+
+          token.isScam = !token.price || Number(token.price) === 0;
+        } catch {
+          token.price = null;
         }
       } catch {}
 
-      // Format balance
-      let balance = "0.0";
-      try {
-        balance = ethers.formatUnits(rawBalance, decimals);
-      } catch {}
-
-      // Harga Dexscreener
-      try {
-        const priceRes = await fetch(
-          `https://api.dexscreener.com/latest/dex/tokens/${contractAddress}`
-        );
-        const j = await priceRes.json();
-        price = j?.pairs?.[0]?.priceUsd ?? null;
-
-        const img = j?.pairs?.[0]?.info?.imageUrl;
-        if (img) logoUrl = img;
-      } catch {}
-
-      result.push({
-        address: contractAddress,
-        name,
-        symbol,
-        decimals,
-        balance,
-        rawBalance,
-        logoUrl,
-        price,
-        isScam: !price || Number(price) === 0,
+      // update UI per token (cepat banget)
+      setTokens((prev) => {
+        const updated = [...prev];
+        updated[i] = { ...token };
+        return updated;
       });
-    };
-
-    // 2️⃣ PROSES DENGAN BATCH CONCURRENCY
-    for (let i = 0; i < filtered.length; i += concurrency) {
-      const batch = filtered.slice(i, i + concurrency);
-      await Promise.all(batch.map(processToken)); // ⚡ cepat, tetap aman
-    }
-
-    setTokens(result);
-    setStatus("🟢 Select token");
+    });
   } catch (err) {
     console.error("SCAN ERROR:", err);
     setStatus("❌ Failed to scan tokens");
