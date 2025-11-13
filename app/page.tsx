@@ -371,16 +371,6 @@ setOverlayMessage("");
     </div>
   </div>
 )}
-{/* LOADING OVERLAY */}
-{overlayLoading && (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[999999]">
-    <div className="flex flex-col items-center text-center">
-      <div className="h-12 w-12 border-4 border-gray-300 border-t-[#00FF3C] rounded-full animate-spin"></div>
-      <p className="mt-4 text-white text-sm px-6">{overlayMessage}</p>
-    </div>
-  </div>
-)}
-
       <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
     </div>
   );
