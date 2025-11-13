@@ -22,13 +22,13 @@ export default function HomePage() {
   const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
   const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
 
-  // POPUP STATES (BOTTOM SHEET)
+  // Bottom-sheet popup states
   const [showApprovePopup, setShowApprovePopup] = useState(false);
   const [showBurnPopup, setShowBurnPopup] = useState(false);
   const [tokensToApprove, setTokensToApprove] = useState<any[]>([]);
   const [tokensToBurn, setTokensToBurn] = useState<any[]>([]);
 
-  // INIT
+  // Init Farcaster SDK
   useEffect(() => {
     sdk.actions.ready();
   }, []);
@@ -39,7 +39,7 @@ export default function HomePage() {
     return () => clearTimeout(t);
   }, [isConnected, address]);
 
-  // LOAD TOKENS
+  // Load tokens (unchanged)
   const loadTokens = async () => {
     if (!address) return;
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
@@ -62,19 +62,16 @@ export default function HomePage() {
 
       const final = await Promise.all(
         list.map(async (t: any) => {
-          const metaRes = await fetch(
-            `https://base-mainnet.g.alchemy.com/v2/${key}`,
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                id: 2,
-                jsonrpc: "2.0",
-                method: "alchemy_getTokenMetadata",
-                params: [t.contractAddress],
-              }),
-            }
-          );
+          const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              id: 2,
+              jsonrpc: "2.0",
+              method: "alchemy_getTokenMetadata",
+              params: [t.contractAddress],
+            }),
+          });
           const meta = await metaRes.json();
           const { decimals, name, symbol, logo } = meta?.result ?? {};
           const decimalsSafe = decimals ?? 18;
@@ -87,8 +84,7 @@ export default function HomePage() {
             .catch(() => null);
 
           const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
-          const logoUrl =
-            priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
+          const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
 
           return {
             address: t.contractAddress,
@@ -112,59 +108,65 @@ export default function HomePage() {
     }
   };
 
-  // APPROVE 1 TOKEN INSIDE POPUP (tile click)
+  // APPROVE single token (tile clickable - MODE B)
   const approveSingleToken = async (token: any) => {
+    if (!token || !token.address) return;
+    // prevent approving zero balance
+    if (token.rawBalance === 0n) {
+      setStatus("Token balance is 0 — cannot approve");
+      return;
+    }
+
     try {
-      const provider = new ethers.BrowserProvider(
-        (sdk as any).wallet.ethProvider as any
-      );
+      setStatus(`Requesting approve for ${token.symbol}...`);
+      // Provider & signer via Farcaster wallet (same as used elsewhere)
+      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
       const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
-      setStatus(`Approving ${token.symbol}...`);
+      // small delay helps avoid provider race conditions
+      await new Promise((r) => setTimeout(r, 220));
 
-      const tokenContract = new ethers.Contract(
-        token.address,
-        ERC20_ABI,
-        signer
-      );
+      const tokenContract = new ethers.Contract(token.address, ERC20_ABI, signer);
+
+      // call approve -> this should open the wallet popup
       const tx = await tokenContract.approve(CONTRACT, token.rawBalance);
 
+      setStatus(`Waiting wallet confirmation for ${token.symbol}...`);
       await rpc.waitForTransaction(tx.hash);
 
-      // update approved tokens safely and check all approved
+      // mark approved
       setApprovedTokens((prev) => {
-        const newApproved = prev.includes(token.address)
-          ? prev
-          : [...prev, token.address];
-        // if every selected token is in newApproved, close popup
-        const allApproved = selected.every((addr) =>
-          newApproved.includes(addr)
-        );
+        const next = prev.includes(token.address) ? prev : [...prev, token.address];
+        // if all selected are approved => auto close popup
+        const allApproved = selected.every((addr) => next.includes(addr));
         if (allApproved) {
           setShowApprovePopup(false);
-          setStatus("All tokens approved. You can burn now.");
+          setStatus("All tokens approved — you can now Burn.");
         } else {
           setStatus(`Approved ${token.symbol}`);
         }
-        return newApproved;
+        return next;
       });
     } catch (err: any) {
-      console.error(err);
-      // if user cancels in wallet, we close popup (per your flow)
-      setStatus("Approve canceled or failed");
-      setShowApprovePopup(false);
+      console.error("approve error:", err);
+      // Do NOT auto-close popup on wallet reject; keep popup open so user can retry
+      // If you want to auto-close on cancel, change this to setShowApprovePopup(false)
+      if (err?.code === 4001 || (err && /user rejected|User denied/i.test(err.message || ""))) {
+        setStatus("User rejected approval — you can retry or Cancel");
+      } else {
+        setStatus("Approve canceled or failed");
+      }
+      // keep popup open (user can retry)
     }
   };
 
-  // BURN ALL SELECTED (used by burn popup)
+  // BURN all selected (called after user confirm in Burn popup)
   const burnAll = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
     try {
       setStatus("🔥 Starting burn process...");
-      const provider = new ethers.BrowserProvider(
-        (sdk as any).wallet.ethProvider as any
-      );
+      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
       const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
@@ -173,14 +175,17 @@ export default function HomePage() {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row || row.rawBalance === 0n) continue;
 
+        // require approval before burning
+        if (!approvedTokens.includes(tokenAddress)) {
+          setStatus(`Token ${row.symbol} not approved. Aborting burn.`);
+          return;
+        }
+
         setStatus(`🔥 Burning ${row.symbol}...`);
 
         let feeWei = ethers.parseUnits("0.0001", "ether");
         try {
-          const [f] = await contract.quoteErc20Fee(
-            row.address,
-            row.rawBalance
-          );
+          const [f] = await contract.quoteErc20Fee(row.address, row.rawBalance);
           if (f && f > 0n) feeWei = f;
         } catch {}
 
@@ -198,28 +203,37 @@ export default function HomePage() {
           gasLimit: 350_000n,
         });
 
+        setStatus(`⏳ Waiting for ${row.symbol} burn tx...`);
         await rpc.waitForTransaction(tx.hash);
+        setStatus(`✅ Burned ${row.symbol}`);
       }
 
       setShowBurnPopup(false);
-      setStatus("🔥 Burn completed");
+      setStatus("🔥 All burns completed");
       await loadTokens();
     } catch (err) {
-      console.error(err);
+      console.error("burn error:", err);
       setShowBurnPopup(false);
       setStatus("Burn canceled or failed");
     }
   };
 
-  //
-  // ---------------- UI START ----------------
-  //
+  // SHARE
+  const shareWarpcast = () => {
+    if (!lastBurnTx) return;
+    sdk.actions.openUrl(
+      `https://warpcast.com/~/compose?text=${encodeURIComponent(
+        "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
+      )}`
+    );
+  };
 
+  //
+  // UI START
+  //
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
-      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">
-        PUBS BURN
-      </h1>
+      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
       <p className="text-sm text-gray-400 mb-4 text-center">
         {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
@@ -246,9 +260,7 @@ export default function HomePage() {
               <button
                 key={t.address}
                 onClick={() =>
-                  setSelected(
-                    active ? selected.filter((x) => x !== t.address) : [...selected, t.address]
-                  )
+                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
                 }
                 className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${active ? "bg-[#132A18]" : ""}`}
               >
@@ -274,21 +286,16 @@ export default function HomePage() {
         </div>
 
         <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
-          {/* === MAIN ACTION BUTTON => open popup (approve or burn) */}
+          {/* MAIN ACTION */}
           <button
             onClick={() => {
               const allApproved = selected.every((s) => approvedTokens.includes(s));
               if (!allApproved) {
-                // build tokensToApprove (preserve original token objects)
-                const toApprove = selected
-                  .map((addr) => tokens.find((t) => t.address === addr))
-                  .filter(Boolean);
+                const toApprove = selected.map((addr) => tokens.find((t) => t.address === addr)).filter(Boolean);
                 setTokensToApprove(toApprove);
                 setShowApprovePopup(true);
               } else {
-                const toBurn = selected
-                  .map((addr) => tokens.find((t) => t.address === addr))
-                  .filter(Boolean);
+                const toBurn = selected.map((addr) => tokens.find((t) => t.address === addr)).filter(Boolean);
                 setTokensToBurn(toBurn);
                 setShowBurnPopup(true);
               }
@@ -303,34 +310,25 @@ export default function HomePage() {
           </button>
 
           {/* REFRESH */}
-          <button
-            onClick={loadTokens}
-            className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]"
-          >
+          <button onClick={loadTokens} className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]">
             Scan / Refresh Tokens
           </button>
         </div>
       </div>
 
-      {/* === APPROVE BOTTOM SHEET (KONDO STYLE, TILE LIST) === */}
+      {/* APPROVE BOTTOM SHEET (tile clickable) */}
       {showApprovePopup && (
         <>
-          {/* backdrop */}
+          {/* backdrop (non-blocking) */}
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 pointer-events-none" />
-          {/* sheet */}
           <div className="fixed inset-0 flex flex-col justify-end z-50 pointer-events-none">
             <div className="pointer-events-auto w-full h-[50vh] bg-[#111] rounded-t-3xl p-5 border-t border-[#00FF3C40] shadow-xl overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-[#00FF3C] text-lg font-bold">Approve Tokens</h2>
-                  <div className="text-xs text-gray-400">Tap a token to approve (one-by-one)</div>
+                  <div className="text-xs text-gray-400">Tap card to open wallet and approve (one-by-one)</div>
                 </div>
-                <button
-                  onClick={() => setShowApprovePopup(false)}
-                  className="text-gray-300 text-sm"
-                >
-                  Close
-                </button>
+                <button onClick={() => setShowApprovePopup(false)} className="text-gray-300 text-sm">Close</button>
               </div>
 
               <div className="space-y-3">
@@ -338,11 +336,7 @@ export default function HomePage() {
                   <div
                     key={t.address}
                     onClick={() => !approvedTokens.includes(t.address) && approveSingleToken(t)}
-                    className={`flex items-center p-3 rounded-2xl cursor-pointer transition border ${
-                      approvedTokens.includes(t.address)
-                        ? "bg-[#0F0F0F] border-[#00FF3C40] opacity-70"
-                        : "bg-[#1A1A1A] border-[#333] hover:border-[#00FF3C]"
-                    }`}
+                    className={`flex items-center p-3 rounded-2xl cursor-pointer transition border ${approvedTokens.includes(t.address) ? "bg-[#0F0F0F] border-[#00FF3C40] opacity-70" : "bg-[#1A1A1A] border-[#333] hover:border-[#00FF3C]"}`}
                   >
                     <img src={t.logoUrl} className="w-10 h-10 rounded-full mr-3" />
                     <div className="flex-1 min-w-0">
@@ -357,19 +351,14 @@ export default function HomePage() {
               </div>
 
               <div className="mt-5">
-                <button
-                  className="w-full py-3 bg-[#333] text-white rounded-xl"
-                  onClick={() => setShowApprovePopup(false)}
-                >
-                  Cancel
-                </button>
+                <button className="w-full py-3 bg-[#333] text-white rounded-xl" onClick={() => setShowApprovePopup(false)}>Cancel</button>
               </div>
             </div>
           </div>
         </>
       )}
 
-      {/* === BURN BOTTOM SHEET (KONDO STYLE) === */}
+      {/* BURN BOTTOM SHEET */}
       {showBurnPopup && (
         <>
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 pointer-events-none" />
@@ -380,12 +369,7 @@ export default function HomePage() {
                   <h2 className="text-[#00FF3C] text-lg font-bold">Burn Tokens</h2>
                   <div className="text-xs text-gray-400">Confirm burning the selected tokens</div>
                 </div>
-                <button
-                  onClick={() => setShowBurnPopup(false)}
-                  className="text-gray-300 text-sm"
-                >
-                  Close
-                </button>
+                <button onClick={() => setShowBurnPopup(false)} className="text-gray-300 text-sm">Close</button>
               </div>
 
               <div className="space-y-3">
@@ -398,20 +382,11 @@ export default function HomePage() {
               </div>
 
               <div className="mt-5">
-                <button
-                  className="w-full py-3 bg-[#00FF3C] text-black rounded-xl font-semibold"
-                  onClick={async () => {
-                    setShowBurnPopup(false);
-                    await burnAll();
-                  }}
-                >
+                <button className="w-full py-3 bg-[#00FF3C] text-black rounded-xl font-semibold" onClick={async () => { setShowBurnPopup(false); await burnAll(); }}>
                   Confirm Burn
                 </button>
 
-                <button
-                  className="w-full py-3 bg-[#333] text-white rounded-xl mt-3"
-                  onClick={() => setShowBurnPopup(false)}
-                >
+                <button className="w-full py-3 bg-[#333] text-white rounded-xl mt-3" onClick={() => setShowBurnPopup(false)}>
                   Cancel
                 </button>
               </div>
@@ -421,16 +396,7 @@ export default function HomePage() {
       )}
 
       {lastBurnTx && (
-        <button
-          onClick={() => {
-            sdk.actions.openUrl(
-              `https://warpcast.com/~/compose?text=${encodeURIComponent(
-                "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
-              )}`
-            );
-          }}
-          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black"
-        >
+        <button onClick={shareWarpcast} className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black">
           📣 Share on Feed
         </button>
       )}
