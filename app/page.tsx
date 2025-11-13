@@ -76,6 +76,7 @@ export default function HomePage() {
       setTokens(baseList);
       setStatus("🟢 Select token");
 
+      // load metadata in background; typed params to avoid TS 'any' warning
       baseList.forEach(async (token: any, i: number) => {
         try {
           const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
@@ -114,7 +115,9 @@ export default function HomePage() {
           } catch {
             token.price = null;
           }
-        } catch {}
+        } catch {
+          // ignore per-token metadata errors
+        }
 
         setTokens((prev) => {
           const updated = [...prev];
@@ -131,22 +134,23 @@ export default function HomePage() {
   const burn = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
 
+    setStatus("🔥 Starting process...");
+
+    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(CONTRACT, ABI, signer);
+    const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
+
     try {
-      setStatus("🔥 Starting process...");
+      // 1️⃣ Collect tokens that need approval
+      const needApproval = selected.filter((addr) => !approvedTokens.includes(addr));
 
-      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT, ABI, signer);
-      const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
+      // 2️⃣ If there are tokens to approve → auto-approve them all (one by one)
+      if (needApproval.length > 0) {
+        for (const tokenAddress of needApproval) {
+          const row = tokens.find((t) => t.address === tokenAddress);
+          if (!row) continue;
 
-      for (const tokenAddress of selected) {
-        const row = tokens.find((t) => t.address === tokenAddress);
-        if (!row || row.rawBalance === 0n) continue;
-
-        const isApproved = approvedTokens.includes(tokenAddress);
-
-        // ===== APPROVE =====
-        if (!isApproved) {
           try {
             setStatus(`🧾 Approving ${row.symbol}...`);
 
@@ -155,10 +159,7 @@ export default function HomePage() {
             setOverlayLoading(true);
 
             const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-
-            const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
-              gasLimit: 200_000n,
-            });
+            const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
 
             setOverlayMessage(`Confirming ${row.symbol} approval...`);
             await rpc.waitForTransaction(tx.hash);
@@ -169,7 +170,6 @@ export default function HomePage() {
 
             setApprovedTokens((prev) => [...prev, tokenAddress]);
           } catch (err: any) {
-            console.error(err);
             setOverlayLoading(false);
             setShowWalletOverlay(false);
             setOverlayMessage("");
@@ -177,16 +177,24 @@ export default function HomePage() {
             if (err?.code === 4001) setStatus("User canceled approve");
             else setStatus("Approve failed");
 
-            continue;
+            return; // stop on first approve failure / user cancel
           }
 
           setShowWalletOverlay(false);
           setOverlayMessage("");
-
-          return; // stop → user harus klik burn lagi
         }
 
-        // ===== FEE =====
+        // All approves done — instruct user to press Burn Now
+        setStatus("🟢 All tokens approved. Tap Burn Now.");
+        return;
+      }
+
+      // 3️⃣ If none need approval → proceed to burn multiple
+      for (const tokenAddress of selected) {
+        const row = tokens.find((t) => t.address === tokenAddress);
+        if (!row) continue;
+
+        // compute fee (contract may return proper fee)
         let feeWei = 0n;
         try {
           const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
@@ -195,7 +203,7 @@ export default function HomePage() {
           feeWei = ethers.parseUnits("0.0001", "ether");
         }
 
-        // ===== BURN =====
+        // burn
         try {
           setStatus(`🔥 Burning ${row.symbol}...`);
 
@@ -226,7 +234,6 @@ export default function HomePage() {
 
           setStatus(`✅ Burned ${row.symbol} successfully!`);
         } catch (err: any) {
-          console.error(err);
           setOverlayLoading(false);
           setOverlayMessage("");
           setShowWalletOverlay(false);
@@ -234,6 +241,7 @@ export default function HomePage() {
           if (err?.code === 4001) setStatus("User canceled burn");
           else setStatus("Burn failed");
 
+          // continue to next token
           continue;
         }
 
@@ -241,7 +249,7 @@ export default function HomePage() {
         setOverlayMessage("");
       }
 
-      // ===== RESET =====
+      // 4️⃣ Reset after all burns
       setApprovedTokens([]);
       setSelected([]);
       await loadTokens();
@@ -269,6 +277,7 @@ export default function HomePage() {
       )}
 
       <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
+
       <p className="text-sm text-gray-400 mb-4 text-center">
         {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
@@ -276,13 +285,13 @@ export default function HomePage() {
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
         <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111] sticky top-0 z-10">
           <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN 🚨</div>
+
           <button
             onClick={() =>
-              selected.length === tokens.length
-                ? setSelected([])
-                : setSelected(tokens.map((t) => t.address))
+              selected.length === tokens.length ? setSelected([]) : setSelected(tokens.map((t) => t.address))
             }
-            className="text-xs text-[#00FF3C]">
+            className="text-xs text-[#00FF3C]"
+          >
             {selected.length === tokens.length ? "Unselect All" : "Select All"}
           </button>
         </div>
@@ -294,14 +303,12 @@ export default function HomePage() {
               <button
                 key={t.address}
                 onClick={() =>
-                  setSelected(
-                    active ? selected.filter((x) => x !== t.address) : [...selected, t.address]
-                  )
+                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
                 }
-                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${
-                  active ? "bg-[#132A18]" : ""
-                }`}>
+                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${active ? "bg-[#132A18]" : ""}`}
+              >
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
+
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
@@ -311,9 +318,11 @@ export default function HomePage() {
                     {t.symbol} • {Number(t.balance).toFixed(4)}
                   </div>
                 </div>
+
                 <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
                   {t.price ? `$${t.price}` : "0.00"}
                 </div>
+
                 <div className="ml-3 w-5 h-5 rounded border border-[#00FF3C] flex items-center justify-center">
                   {active && <div className="w-3 h-3 rounded bg-[#00FF3C]" />}
                 </div>
@@ -329,7 +338,8 @@ export default function HomePage() {
               selected.every((s) => approvedTokens.includes(s))
                 ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black"
                 : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
-            }`}>
+            }`}
+          >
             {selected.length === 0
               ? "Select token first"
               : selected.every((s) => approvedTokens.includes(s))
@@ -337,18 +347,14 @@ export default function HomePage() {
               : `Approve Selected (${selected.length})`}
           </button>
 
-          <button
-            onClick={loadTokens}
-            className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]">
+          <button onClick={loadTokens} className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]">
             Scan / Refresh Tokens
           </button>
         </div>
       </div>
 
       {lastBurnTx && (
-        <button
-          onClick={shareWarpcast}
-          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black">
+        <button onClick={shareWarpcast} className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black">
           📣 Share on Feed
         </button>
       )}
