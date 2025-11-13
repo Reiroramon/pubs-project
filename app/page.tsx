@@ -21,6 +21,39 @@ const [tokens, setTokens] = useState<any[]>([]);
 const [selected, setSelected] = useState<string[]>([]);
 const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
 const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
+const [showApprovePopup, setShowApprovePopup] = useState(false);
+const [showBurnPopup, setShowBurnPopup] = useState(false);
+const [tokensToApprove, setTokensToApprove] = useState<any[]>([]);
+const [tokensToBurn, setTokensToBurn] = useState<any[]>([]);
+const approveSingleToken = async (token: any) => {
+  try {
+    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
+    const signer = await provider.getSigner();
+    const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
+
+    setStatus(`Approving ${token.symbol}...`);
+
+    const tokenContract = new ethers.Contract(token.address, ERC20_ABI, signer);
+    const tx = await tokenContract.approve(CONTRACT, token.rawBalance);
+
+    await rpc.waitForTransaction(tx.hash);
+
+    // tanda approved
+    setApprovedTokens(prev => [...prev, token.address]);
+
+    // popup auto-close jika semua sudah approved
+    const allApproved = selected.every(addr =>
+      [...approvedTokens, token.address].includes(addr)
+    );
+
+    if (allApproved) setShowApprovePopup(false);
+
+  } catch (err) {
+    console.error(err);
+    setStatus("User canceled or error");
+    setShowApprovePopup(false); // pop up hilang kalau user cancel
+  }
+};
 
 useEffect(() => {
 sdk.actions.ready();
@@ -269,6 +302,68 @@ Scan / Refresh Tokens
 
 </div>
 </div>
+{showApprovePopup && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="bg-[#111] p-5 rounded-xl border border-[#00FF3C50] w-80">
+
+      <h2 className="text-[#00FF3C] mb-3 font-bold">Approve Tokens</h2>
+
+      {tokensToApprove.map((t) => (
+        <button
+          key={t.address}
+          disabled={approvedTokens.includes(t.address)}
+          className={`w-full py-2 mb-2 rounded-lg ${
+            approvedTokens.includes(t.address)
+              ? "bg-gray-600 text-white"
+              : "bg-[#00FF3C] text-black"
+          }`}
+          onClick={() => approveSingleToken(t)}
+        >
+          {approvedTokens.includes(t.address)
+            ? `Approved ${t.symbol}`
+            : `Approve ${t.symbol}`}
+        </button>
+      ))}
+
+      <button
+        className="w-full py-2 mt-3 bg-[#333] text-white rounded-lg"
+        onClick={() => setShowApprovePopup(false)}
+      >
+        Close
+      </button>
+    </div>
+  </div>
+)}
+{showBurnPopup && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="bg-[#111] p-5 rounded-xl border border-[#00FF3C50] w-80">
+
+      <h2 className="text-[#00FF3C] mb-3 font-bold">Burn Tokens</h2>
+
+      {tokensToBurn.map(t => (
+        <div key={t.address} className="text-white text-sm mb-1">{t.symbol}</div>
+      ))}
+
+      <button
+        className="w-full py-2 mt-3 bg-[#00FF3C] text-black rounded-lg"
+        onClick={async () => {
+          setShowBurnPopup(false);
+          await burn(); // burn sudah ada di kode kamu
+        }}
+      >
+        Confirm Burn
+      </button>
+
+      <button
+        className="w-full py-2 mt-3 bg-[#333] text-white rounded-lg"
+        onClick={() => setShowBurnPopup(false)}
+      >
+        Close
+      </button>
+
+    </div>
+  </div>
+)}
 
 {lastBurnTx && (
 <button
