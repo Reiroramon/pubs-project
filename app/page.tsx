@@ -21,6 +21,8 @@ export default function HomePage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
   const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     sdk.actions.ready();
@@ -118,13 +120,23 @@ const burn = async () => {
       // === STEP 1: Approve ===
       const isApproved = approvedTokens.includes(tokenAddress);
       if (!isApproved) {
-        setStatus(`🧾 Approving ${row.symbol}...`);
-        const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-        const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
-        setStatus(`⏳ Waiting for ${row.symbol} approval...`);
-        await rpc.waitForTransaction(tx.hash); // ✅ gunakan rpc publik
-        setApprovedTokens((prev) => [...prev, tokenAddress]);
-        setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
+setShowOverlay(true);
+setStatus(`🧾 Approving ${row.symbol}...`);
+
+const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
+
+setStatus(`⏳ Waiting for ${row.symbol} approval...`);
+await rpc.waitForTransaction(tx.hash);
+
+setApprovedTokens((prev) => [...prev, tokenAddress]);
+
+setShowOverlay(false);
+setShowSuccess(true);
+setTimeout(() => setShowSuccess(false), 1500);
+
+setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
+
         continue;
       }
 
