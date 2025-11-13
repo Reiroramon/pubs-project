@@ -171,7 +171,7 @@ export default function HomePage() {
             setShowWalletOverlay(false);
             setOverlayMessage("");
 
-            
+            return;
           }
 
           // === STEP 2: Fee ===
