@@ -186,7 +186,7 @@ try {
   console.error("Fee error, using fallback:", err);
 
   // fallback aman (tidak boleh nol)
-  feeWei = ethers.parseUnits("0.00005", "ether");
+  feeWei = ethers.parseUnits("0.0001", "ether");
 }
 
 
