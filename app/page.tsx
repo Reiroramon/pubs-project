@@ -112,7 +112,7 @@ export default function HomePage() {
     }
   };
 
-  // APPROVE 1 TOKEN INSIDE POPUP
+  // APPROVE 1 TOKEN INSIDE POPUP (tile click)
   const approveSingleToken = async (token: any) => {
     try {
       const provider = new ethers.BrowserProvider(
@@ -132,24 +132,36 @@ export default function HomePage() {
 
       await rpc.waitForTransaction(tx.hash);
 
-      setApprovedTokens((prev) => [...prev, token.address]);
-
-      // CLOSE POPUP IF ALL APPROVED
-      const allApproved = selected.every((addr) =>
-        [...approvedTokens, token.address].includes(addr)
-      );
-
-      if (allApproved) setShowApprovePopup(false);
-    } catch (err) {
+      // update approved tokens safely and check all approved
+      setApprovedTokens((prev) => {
+        const newApproved = prev.includes(token.address)
+          ? prev
+          : [...prev, token.address];
+        // if every selected token is in newApproved, close popup
+        const allApproved = selected.every((addr) =>
+          newApproved.includes(addr)
+        );
+        if (allApproved) {
+          setShowApprovePopup(false);
+          setStatus("All tokens approved. You can burn now.");
+        } else {
+          setStatus(`Approved ${token.symbol}`);
+        }
+        return newApproved;
+      });
+    } catch (err: any) {
       console.error(err);
+      // if user cancels in wallet, we close popup (per your flow)
       setStatus("Approve canceled or failed");
       setShowApprovePopup(false);
     }
   };
 
-  // BURN FUNCTION
+  // BURN ALL SELECTED (used by burn popup)
   const burnAll = async () => {
+    if (!selected.length) return setStatus("Select token(s) to burn.");
     try {
+      setStatus("🔥 Starting burn process...");
       const provider = new ethers.BrowserProvider(
         (sdk as any).wallet.ethProvider as any
       );
@@ -191,7 +203,7 @@ export default function HomePage() {
 
       setShowBurnPopup(false);
       setStatus("🔥 Burn completed");
-      loadTokens();
+      await loadTokens();
     } catch (err) {
       console.error(err);
       setShowBurnPopup(false);
@@ -209,12 +221,9 @@ export default function HomePage() {
         PUBS BURN
       </h1>
       <p className="text-sm text-gray-400 mb-4 text-center">
-        {address
-          ? `${address.slice(0, 6)}…${address.slice(-4)}`
-          : "Connecting wallet..."}
+        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
 
-      {/* CARD */}
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
         <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111] sticky top-0 z-10">
           <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN</div>
@@ -238,40 +247,24 @@ export default function HomePage() {
                 key={t.address}
                 onClick={() =>
                   setSelected(
-                    active
-                      ? selected.filter((x) => x !== t.address)
-                      : [...selected, t.address]
+                    active ? selected.filter((x) => x !== t.address) : [...selected, t.address]
                   )
                 }
-                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${
-                  active ? "bg-[#132A18]" : ""
-                }`}
+                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${active ? "bg-[#132A18]" : ""}`}
               >
-                <img
-                  src={t.logoUrl}
-                  className="w-7 h-7 rounded-full mr-3"
-                />
-
+                <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
-                    {t.isScam && (
-                      <span className="text-[10px] text-[#FF4A4A]">🚨</span>
-                    )}
+                    {t.isScam && <span className="text-[10px] text-[#FF4A4A]">🚨</span>}
                   </div>
                   <div className="text-xs text-gray-400 truncate">
                     {t.symbol} • {Number(t.balance).toFixed(4)}
                   </div>
                 </div>
-
-                <div
-                  className={`text-sm ${
-                    t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"
-                  }`}
-                >
+                <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
                   {t.price ? `$${t.price}` : "0.00"}
                 </div>
-
                 <div className="ml-3 w-5 h-5 rounded border border-[#00FF3C] flex items-center justify-center">
                   {active && <div className="w-3 h-3 rounded bg-[#00FF3C]" />}
                 </div>
@@ -281,30 +274,26 @@ export default function HomePage() {
         </div>
 
         <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
-          {/* === MAIN ACTION BUTTON === */}
+          {/* === MAIN ACTION BUTTON => open popup (approve or burn) */}
           <button
             onClick={() => {
-              const allApproved = selected.every((s) =>
-                approvedTokens.includes(s)
-              );
-
+              const allApproved = selected.every((s) => approvedTokens.includes(s));
               if (!allApproved) {
-                setTokensToApprove(
-                  selected.map((addr) => tokens.find((t) => t.address === addr))
-                );
+                // build tokensToApprove (preserve original token objects)
+                const toApprove = selected
+                  .map((addr) => tokens.find((t) => t.address === addr))
+                  .filter(Boolean);
+                setTokensToApprove(toApprove);
                 setShowApprovePopup(true);
               } else {
-                setTokensToBurn(
-                  selected.map((addr) => tokens.find((t) => t.address === addr))
-                );
+                const toBurn = selected
+                  .map((addr) => tokens.find((t) => t.address === addr))
+                  .filter(Boolean);
+                setTokensToBurn(toBurn);
                 setShowBurnPopup(true);
               }
             }}
-            className={`w-full py-3 rounded-xl font-bold ${
-              selected.every((s) => approvedTokens.includes(s))
-                ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black"
-                : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
-            }`}
+            className={`w-full py-3 rounded-xl font-bold ${selected.every((s) => approvedTokens.includes(s)) ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black" : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"}`}
           >
             {selected.length === 0
               ? "Select token first"
@@ -323,76 +312,112 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* APPROVE POPUP (BOTTOM SHEET) */}
+      {/* === APPROVE BOTTOM SHEET (KONDO STYLE, TILE LIST) === */}
       {showApprovePopup && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex flex-col justify-end z-50">
-          <div className="bg-[#111] w-full rounded-t-3xl p-5 border-t border-[#00FF3C50] h-[50vh] overflow-y-auto">
-            <h2 className="text-[#00FF3C] text-lg font-bold mb-3">
-              Approve Tokens
-            </h2>
+        <>
+          {/* backdrop */}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 pointer-events-none" />
+          {/* sheet */}
+          <div className="fixed inset-0 flex flex-col justify-end z-50 pointer-events-none">
+            <div className="pointer-events-auto w-full h-[50vh] bg-[#111] rounded-t-3xl p-5 border-t border-[#00FF3C40] shadow-xl overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-[#00FF3C] text-lg font-bold">Approve Tokens</h2>
+                  <div className="text-xs text-gray-400">Tap a token to approve (one-by-one)</div>
+                </div>
+                <button
+                  onClick={() => setShowApprovePopup(false)}
+                  className="text-gray-300 text-sm"
+                >
+                  Close
+                </button>
+              </div>
 
-            {tokensToApprove.map((t) => (
-              <button
-                key={t.address}
-                className={`w-full py-2 mb-2 rounded-lg ${
-                  approvedTokens.includes(t.address)
-                    ? "bg-gray-600 text-white"
-                    : "bg-[#00FF3C] text-black"
-                }`}
-                onClick={() => approveSingleToken(t)}
-                disabled={approvedTokens.includes(t.address)}
-              >
-                {approvedTokens.includes(t.address)
-                  ? `Approved ${t.symbol}`
-                  : `Approve ${t.symbol}`}
-              </button>
-            ))}
+              <div className="space-y-3">
+                {tokensToApprove.map((t) => (
+                  <div
+                    key={t.address}
+                    onClick={() => !approvedTokens.includes(t.address) && approveSingleToken(t)}
+                    className={`flex items-center p-3 rounded-2xl cursor-pointer transition border ${
+                      approvedTokens.includes(t.address)
+                        ? "bg-[#0F0F0F] border-[#00FF3C40] opacity-70"
+                        : "bg-[#1A1A1A] border-[#333] hover:border-[#00FF3C]"
+                    }`}
+                  >
+                    <img src={t.logoUrl} className="w-10 h-10 rounded-full mr-3" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white font-semibold truncate">{t.symbol}</div>
+                      <div className="text-gray-400 text-xs truncate">{t.name}</div>
+                    </div>
+                    <div className={`px-3 py-1 rounded-lg text-sm ${approvedTokens.includes(t.address) ? "bg-gray-700 text-gray-300" : "bg-[#00FF3C] text-black"}`}>
+                      {approvedTokens.includes(t.address) ? "Approved" : "Approve"}
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-            <button
-              className="w-full py-2 bg-[#333] text-white rounded-lg mt-3"
-              onClick={() => setShowApprovePopup(false)}
-            >
-              Cancel
-            </button>
+              <div className="mt-5">
+                <button
+                  className="w-full py-3 bg-[#333] text-white rounded-xl"
+                  onClick={() => setShowApprovePopup(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* BURN POPUP (BOTTOM SHEET) */}
+      {/* === BURN BOTTOM SHEET (KONDO STYLE) === */}
       {showBurnPopup && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex flex-col justify-end z-50">
-          <div className="bg-[#111] w-full rounded-t-3xl p-5 border-t border-[#00FF3C50] h-[50vh] overflow-y-auto">
-            <h2 className="text-[#00FF3C] text-lg font-bold mb-3">
-              Burn Tokens
-            </h2>
-
-            {tokensToBurn.map((t) => (
-              <div
-                key={t.address}
-                className="text-white text-sm mb-1"
-              >
-                {t.symbol}
+        <>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 pointer-events-none" />
+          <div className="fixed inset-0 flex flex-col justify-end z-50 pointer-events-none">
+            <div className="pointer-events-auto w-full h-[50vh] bg-[#111] rounded-t-3xl p-5 border-t border-[#00FF3C40] shadow-xl overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-[#00FF3C] text-lg font-bold">Burn Tokens</h2>
+                  <div className="text-xs text-gray-400">Confirm burning the selected tokens</div>
+                </div>
+                <button
+                  onClick={() => setShowBurnPopup(false)}
+                  className="text-gray-300 text-sm"
+                >
+                  Close
+                </button>
               </div>
-            ))}
 
-            <button
-              className="w-full py-2 bg-[#00FF3C] text-black rounded-lg mt-3"
-              onClick={async () => {
-                setShowBurnPopup(false);
-                await burnAll();
-              }}
-            >
-              Confirm Burn
-            </button>
+              <div className="space-y-3">
+                {tokensToBurn.map((t) => (
+                  <div key={t.address} className="flex items-center p-3 rounded-2xl bg-[#1A1A1A] border border-[#333]">
+                    <img src={t.logoUrl} className="w-10 h-10 rounded-full mr-3" />
+                    <div className="flex-1 text-white">{t.symbol}</div>
+                  </div>
+                ))}
+              </div>
 
-            <button
-              className="w-full py-2 bg-[#333] text-white rounded-lg mt-3"
-              onClick={() => setShowBurnPopup(false)}
-            >
-              Cancel
-            </button>
+              <div className="mt-5">
+                <button
+                  className="w-full py-3 bg-[#00FF3C] text-black rounded-xl font-semibold"
+                  onClick={async () => {
+                    setShowBurnPopup(false);
+                    await burnAll();
+                  }}
+                >
+                  Confirm Burn
+                </button>
+
+                <button
+                  className="w-full py-3 bg-[#333] text-white rounded-xl mt-3"
+                  onClick={() => setShowBurnPopup(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {lastBurnTx && (
@@ -400,7 +425,7 @@ export default function HomePage() {
           onClick={() => {
             sdk.actions.openUrl(
               `https://warpcast.com/~/compose?text=${encodeURIComponent(
-                "I just cleaned my wallet by burning scam tokens ♻️🔥"
+                "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
               )}`
             );
           }}
