@@ -22,7 +22,7 @@ export default function HomePage() {
   const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
   const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
 
-  // ⭐ State overlay
+  // ⭐ Tambahan overlay
   const [showOverlay, setShowOverlay] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -58,16 +58,19 @@ export default function HomePage() {
 
       const final = await Promise.all(
         list.map(async (t: any) => {
-          const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: 2,
-              jsonrpc: "2.0",
-              method: "alchemy_getTokenMetadata",
-              params: [t.contractAddress],
-            }),
-          });
+          const metaRes = await fetch(
+            `https://base-mainnet.g.alchemy.com/v2/${key}`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                id: 2,
+                jsonrpc: "2.0",
+                method: "alchemy_getTokenMetadata",
+                params: [t.contractAddress],
+              }),
+            }
+          );
           const meta = await metaRes.json();
           const { decimals, name, symbol, logo } = meta?.result ?? {};
           const decimalsSafe = decimals ?? 18;
@@ -75,7 +78,9 @@ export default function HomePage() {
           const balance = ethers.formatUnits(t.tokenBalance, decimalsSafe);
           const priceRes = await fetch(
             `https://api.dexscreener.com/latest/dex/tokens/${t.contractAddress}`
-          ).then((r) => r.json()).catch(() => null);
+          )
+            .then((r) => r.json())
+            .catch(() => null);
 
           const price = priceRes?.pairs?.[0]?.priceUsd ?? null;
           const logoUrl = priceRes?.pairs?.[0]?.info?.imageUrl ?? logo ?? "/token.png";
@@ -107,7 +112,9 @@ export default function HomePage() {
     try {
       setStatus("🔥 Starting process...");
 
-      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
+      const provider = new ethers.BrowserProvider(
+        (sdk as any).wallet.ethProvider as any
+      );
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
       const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
@@ -116,14 +123,20 @@ export default function HomePage() {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row || row.rawBalance === 0n) continue;
 
-        // === APPROVE ===
+        // === STEP 1: APPROVE ===
         const isApproved = approvedTokens.includes(tokenAddress);
         if (!isApproved) {
-          setShowOverlay(true);
           setStatus(`🧾 Approving ${row.symbol}...`);
+          setShowOverlay(true);
 
-          const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-          const tx = await tokenContract.approve(CONTRACT, row.rawBalance);
+          const tokenContract = new ethers.Contract(
+            row.address,
+            ERC20_ABI,
+            signer
+          );
+          const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
+            gasLimit: 200_000n,
+          });
 
           setStatus(`⏳ Waiting for ${row.symbol} approval...`);
           await rpc.waitForTransaction(tx.hash);
@@ -138,15 +151,18 @@ export default function HomePage() {
           continue;
         }
 
-        // === FEE ===
+        // === STEP 2: FEE ===
         let feeWei = ethers.parseUnits("0.0001", "ether");
         try {
-          const [f] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+          const [f] = await contract.quoteErc20Fee(
+            row.address,
+            row.rawBalance
+          );
           if (f && f > 0n) feeWei = f;
         } catch {}
 
-        // === BURN ===
-        setStatus(`🔥 Burning ${row.symbol}...`);
+        // === STEP 3: BURN ===
+        setStatus(`🔥 Burning ${row.symbol}... Confirm in wallet.`);
         setShowOverlay(true);
 
         const iface = new ethers.Interface(ABI);
@@ -160,6 +176,7 @@ export default function HomePage() {
           to: CONTRACT,
           data,
           value: feeWei,
+          gasLimit: 350_000n,
         });
 
         setStatus(`⏳ Waiting for ${row.symbol} burn...`);
@@ -178,19 +195,23 @@ export default function HomePage() {
 
   return (
     <>
-      {/* ⭐ MINIAPP CONTENT */}
+      {/* ⭐ Main UI */}
       <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
+        <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">
+          PUBS BURN
+        </h1>
 
-        <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
         <p className="text-sm text-gray-400 mb-4 text-center">
-          {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
+          {address
+            ? `${address.slice(0, 6)}…${address.slice(-4)}`
+            : "Connecting wallet..."}
         </p>
 
-        {/* token list */}
         <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
-
           <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111] sticky top-0 z-10">
-            <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN</div>
+            <div className="text-xs text-[#FF4A4A]">
+              ALWAYS VERIFY BEFORE BURN
+            </div>
             <button
               onClick={() =>
                 selected.length === tokens.length
@@ -199,10 +220,13 @@ export default function HomePage() {
               }
               className="text-xs text-[#00FF3C]"
             >
-              {selected.length === tokens.length ? "Unselect All" : "Select All"}
+              {selected.length === tokens.length
+                ? "Unselect All"
+                : "Select All"}
             </button>
           </div>
 
+          {/* LIST TOKEN */}
           <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
             {tokens.map((t) => {
               const active = selected.includes(t.address);
@@ -210,17 +234,26 @@ export default function HomePage() {
                 <button
                   key={t.address}
                   onClick={() =>
-                    setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
+                    setSelected(
+                      active
+                        ? selected.filter((x) => x !== t.address)
+                        : [...selected, t.address]
+                    )
                   }
                   className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${
                     active ? "bg-[#132A18]" : ""
                   }`}
                 >
-                  <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
+                  <img
+                    src={t.logoUrl}
+                    className="w-7 h-7 rounded-full mr-3"
+                  />
                   <div className="flex-1 overflow-hidden">
                     <div className="font-medium truncate flex items-center gap-1">
                       {t.name}
-                      {t.isScam && <span className="text-[10px] text-[#FF4A4A]">🚨</span>}
+                      {t.isScam && (
+                        <span className="text-[10px] text-[#FF4A4A]">🚨</span>
+                      )}
                     </div>
                     <div className="text-xs text-gray-400 truncate">
                       {t.symbol} • {Number(t.balance).toFixed(4)}
@@ -231,22 +264,21 @@ export default function HomePage() {
             })}
           </div>
 
+          {/* BUTTON AREA */}
           <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
-
             <button
               onClick={burn}
-              className={`w-full py-3 rounded-xl font-bold
-                ${selected.every((s) => approvedTokens.includes(s))
+              className={`w-full py-3 rounded-xl font-bold ${
+                selected.every((s) => approvedTokens.includes(s))
                   ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black"
                   : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
-                }
-              `}
+              }`}
             >
               {selected.length === 0
                 ? "Select token first"
                 : selected.every((s) => approvedTokens.includes(s))
-                  ? `Burn Now (${selected.length})`
-                  : `Approve Selected (${selected.length})`}
+                ? `Burn Now (${selected.length})`
+                : `Approve Selected (${selected.length})`}
             </button>
 
             <button
@@ -255,41 +287,24 @@ export default function HomePage() {
             >
               Scan / Refresh Tokens
             </button>
-
           </div>
         </div>
-
-        {lastBurnTx && (
-          <button
-            onClick={() =>
-              sdk.actions.openUrl(
-                `https://warpcast.com/~/compose?text=${encodeURIComponent(
-                  "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
-                )}`
-              )
-            }
-            className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black"
-          >
-            📣 Share on Feed
-          </button>
-        )}
 
         <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
       </div>
 
-      {/* ⭐⭐⭐ OVERLAY ROOT — ⬅ LETAK OVERLAY YANG BENAR */}
+      {/* ⭐⭐⭐ OVERLAY ROOT — HANYA AREA ATAS, TRANSPARAN */}
       {showOverlay && (
-        <div className="fixed top-0 left-0 w-full h-[300px] bg-black/20 z-[9999] pointer-events-none" />
+        <div className="fixed top-0 left-0 w-full h-[260px] bg-black/10 z-[9999] pointer-events-none" />
       )}
 
       {showSuccess && (
-        <div className="fixed top-0 left-0 w-full h-[300px] flex items-center justify-center z-[9999] pointer-events-none">
-          <div className="px-4 py-2 bg-black/40 text-[#00FF3C] rounded-lg text-sm font-bold">
+        <div className="fixed top-0 left-0 w-full h-[260px] flex items-center justify-center z-[9999] pointer-events-none">
+          <div className="px-4 py-2 bg-black/30 text-[#00FF3C] rounded-lg text-sm font-bold">
             ✓ Approve Success
           </div>
         </div>
       )}
-
     </>
   );
 }
