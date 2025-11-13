@@ -54,3 +54,12 @@ div:has(> .fc-mini-app-root),
 .fc-mini-app-root {
   background: transparent !important;
 }
+/* overlay ketika wallet popup muncul */
+.wallet-overlay {
+  position: fixed;
+  inset: 0;
+  backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 9999; 
+  pointer-events: none; 
+}
