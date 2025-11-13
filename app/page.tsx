@@ -233,7 +233,7 @@ export default function HomePage() {
               setStatus("Burn failed");
             }
 
-            continue; // lanjut token berikutnya
+            // lanjut token berikutnya
           }
 
           // selesai burn token ini → matikan overlay
