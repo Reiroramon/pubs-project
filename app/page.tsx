@@ -120,39 +120,59 @@ export default function HomePage() {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row || row.rawBalance === 0n) continue;
 
-        const isApproved = approvedTokens.includes(tokenAddress);
-        if (!isApproved) {
-          setStatus(`🧾 Approving ${row.symbol}...`);
+       const isApproved = approvedTokens.includes(tokenAddress);
+if (!isApproved) {
+  try {
+    setStatus(`🧾 Approving ${row.symbol}...`);
 
-          // 🔥 aktifkan overlay saat wallet popup approve muncul
-          setShowWalletOverlay(true);
+    // 🔥 Nyalakan overlay
+    setShowWalletOverlay(true);
+    setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
+    setOverlayLoading(true);
 
-          const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-         setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
-setOverlayLoading(true);
+    const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
 
-const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
+    // 🚀 popup wallet muncul disini
+    const tx = await tokenContract.approve(CONTRACT, row.rawBalance, {
+      gasLimit: 200_000n
+    });
 
-setOverlayMessage(`Waiting confirmation for ${row.symbol}...`);
+    // ubah pesan setelah popup diklik user
+    setOverlayMessage(`Confirming ${row.symbol} approval...`);
 
-await rpc.waitForTransaction(tx.hash);
+    // tunggu blockchain
+    await rpc.waitForTransaction(tx.hash);
 
-setOverlayLoading(false);
-setOverlaySuccess(`${row.symbol} Approved!`);
-setTimeout(() => setOverlaySuccess(""), 1200);
+    // selesai approve → tampilkan sukses
+    setOverlayLoading(false);
+    setOverlaySuccess(`${row.symbol} Approved!`);
+    setTimeout(() => setOverlaySuccess(""), 1200);
 
+    setApprovedTokens(prev => [...prev, tokenAddress]);
 
-          setStatus(`⏳ Waiting for ${row.symbol} approval...`);
-          await rpc.waitForTransaction(tx.hash);
+  } catch (err: any) {
+    console.error(err);
 
-          setApprovedTokens((prev) => [...prev, tokenAddress]);
-          setStatus(`✅ ${row.symbol} approved! Ready to burn.`);
+    // ❗ kalau user cancel, matikan overlay
+    setOverlayLoading(false);
+    setShowWalletOverlay(false);
+    setOverlayMessage("");
 
-          // 🔥 matikan overlay setelah approve selesai
-          setShowWalletOverlay(false);
+    if (err?.code === 4001) {
+      setStatus("User canceled approve");
+    } else {
+      setStatus("Approve failed");
+    }
 
-          continue;
-        }
+    continue; // lanjut token berikut / stop sesuai logic
+  }
+
+  // 🔥 Matikan overlay setelah approve selesai
+  setShowWalletOverlay(false);
+  setOverlayMessage("");
+
+  continue;
+}
 
         let feeWei = ethers.parseUnits("0.0001", "ether");
         try {
@@ -160,44 +180,61 @@ setTimeout(() => setOverlaySuccess(""), 1200);
           if (f && f > 0n) feeWei = f;
         } catch {}
 
-        setStatus(`🔥 Burning ${row.symbol}...`);
+       // === STEP 3: Burn ===
+try {
+  setStatus(`🔥 Burning ${row.symbol}...`);
 
-        const iface = new ethers.Interface(ABI);
-        const data = iface.encodeFunctionData("burnToken", [
-          row.address,
-          row.rawBalance,
-          JSON.stringify({ safe: true }),
-        ]);
+  // --- popup muncul ---
+  setShowWalletOverlay(true);
+  setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
+  setOverlayLoading(true);
 
-        // 🔥 aktifkan overlay saat popup wallet burn muncul
-        setShowWalletOverlay(true);
+  const iface = new ethers.Interface(ABI);
+  const data = iface.encodeFunctionData("burnToken", [
+    row.address,
+    row.rawBalance,
+    JSON.stringify({ safe: true }),
+  ]);
 
-       setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
-setOverlayLoading(true);
+  const tx = await signer.sendTransaction({
+    to: CONTRACT,
+    data,
+    value: feeWei,
+    gasLimit: 350_000n,
+  });
 
-const tx = await signer.sendTransaction({
-  to: CONTRACT,
-  data,
-  value: feeWei,
-  gasLimit: 350_000n,
-});
+  // --- menunggu konfirmasi ---
+  setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
+  await rpc.waitForTransaction(tx.hash);
 
-setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
+  // --- sukses ---
+  setOverlayLoading(false);
+  setOverlaySuccess(`${row.symbol} Burned!`);
+  setTimeout(() => setOverlaySuccess(""), 1200);
 
-await rpc.waitForTransaction(tx.hash);
+  setStatus(`✅ Burned ${row.symbol} successfully!`);
 
-setOverlayLoading(false);
-setOverlaySuccess(`${row.symbol} Burned!`);
-setTimeout(() => setOverlaySuccess(""), 1200);
+} catch (err: any) {
+  console.error(err);
 
+  // matikan overlay jika user cancel
+  setOverlayLoading(false);
+  setOverlayMessage("");
+  setShowWalletOverlay(false);
 
-        setStatus(`⏳ Waiting for ${row.symbol} burn...`);
-        await rpc.waitForTransaction(tx.hash);
+  if (err?.code === 4001) {
+    setStatus("User canceled burn");
+  } else {
+    setStatus("Burn failed");
+  }
 
-        // 🔥 matikan overlay setelah burn selesai
-        setShowWalletOverlay(false);
+  continue; // lanjut ke token berikutnya
+}
 
-        setStatus(`✅ Burned ${row.symbol} successfully!`);
+// selesai → matikan overlay
+setShowWalletOverlay(false);
+setOverlayMessage("");
+
       }
 
       loadTokens();
@@ -331,6 +368,15 @@ setTimeout(() => setOverlaySuccess(""), 1200);
   <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999999]">
     <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">
       {overlaySuccess}
+    </div>
+  </div>
+)}
+{/* LOADING OVERLAY */}
+{overlayLoading && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[999999]">
+    <div className="flex flex-col items-center text-center">
+      <div className="h-12 w-12 border-4 border-gray-300 border-t-[#00FF3C] rounded-full animate-spin"></div>
+      <p className="mt-4 text-white text-sm px-6">{overlayMessage}</p>
     </div>
   </div>
 )}
