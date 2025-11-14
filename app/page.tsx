@@ -1,12 +1,29 @@
-"use client";
+import type { Metadata } from "next";
 
-import Providers from "./providers";
-import MiniApp from "./miniapp-content";
+export const metadata: Metadata = {
+  title: "PUBS BURN",
+  other: {
+    "fc:miniapp": JSON.stringify({
+      version: "1",
+      imageUrl: "https://pubs-burn.vercel.app/image.png",
+      button: {
+        title: "Open PUBS BURN",
+        action: {
+          type: "launch_app",
+          name: "PUBS BURN",
+          url: "https://pubs-burn.vercel.app/miniapp"
+        }
+      }
+    })
+  }
+};
 
-export default function HomePage() {
+export default function Home() {
   return (
-    <Providers>
-      <MiniApp />
-    </Providers>
+    <main style={{ padding: 32, color: "white" }}>
+      <h1>PUBS BURN</h1>
+      <p>Tap to open Mini App:</p>
+      <a href="/miniapp" style={{ color: "lightgreen" }}>Open Mini App</a>
+    </main>
   );
 }
