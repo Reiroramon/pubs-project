@@ -1,19 +1,36 @@
 // app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "./providers";
+
+const miniapp = {
+  version: "1",
+  imageUrl: "https://pubs-burn.vercel.app/og.png",
+  button: {
+    title: "Open App",
+    action: {
+      type: "launch_frame",
+      name: "PUBS BURN",
+      url: "https://pubs-burn.vercel.app",
+      splashImageUrl: "https://pubs-burn.vercel.app/icon.png",
+      splashBackgroundColor: "#000000",
+    },
+  },
+};
 
 export const metadata: Metadata = {
   title: "PUBS BURN",
+  other: {
+    "fc:miniapp": JSON.stringify(miniapp),
+  },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
