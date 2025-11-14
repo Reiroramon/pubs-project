@@ -1,8 +1,13 @@
 // app/miniapp/layout.tsx
-import Providers from "../providers";
-import "./../globals.css";
+import { Providers } from "../providers";   // ← FIX
+import "../globals.css";
 
 export default function MiniappLayout({ children }: { children: React.ReactNode }) {
-  // Only wrap the miniapp route with Wagmi/Query providers
-  return <Providers>{children}</Providers>;
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
 }
