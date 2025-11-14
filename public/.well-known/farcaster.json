@@ -8,15 +8,24 @@
     "version": "1",
     "name": "PUBS BURN",
     "iconUrl": "https://pubs-burn.vercel.app/icon.png",
-    "homeUrl": "https://pubs-burn.vercel.app",
     "splashImageUrl": "https://pubs-burn.vercel.app/splash.png",
     "splashBackgroundColor": "#0A0A0A",
+    "homeUrl": "https://pubs-burn.vercel.app",
+    "webhookUrl": "https://pubs-burn.vercel.app/api/webhook",
     "subtitle": "Burn scam tokens",
-    "description": "Clean your wallet and burn trash tokens safely.",
+    "description": "PUBS BURN helps you clean your wallet by detecting and burning scam tokens",
+    "screenshotUrls": [
+    "https://pubs-burn.vercel.app/screenshot1.jpg"
+    ],
     "primaryCategory": "utility",
-    "tags": ["burn", "wallet", "tools"],
+    "tags": [
+       "wallet",
+      "tools",
+      "burn"
+    ],
     "heroImageUrl": "https://pubs-burn.vercel.app/hero.png",
-    "ogTitle": "PUBS BURN – Clean Your Wallet",
+    "tagline": "Remove trash tokens forever",
+    "ogTitle": "Clean Your Wallet",
     "ogDescription": "Burn scam tokens instantly and protect your wallet",
     "ogImageUrl": "https://pubs-burn.vercel.app/hero.png"
   }
