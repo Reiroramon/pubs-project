@@ -29,13 +29,14 @@ export default function MiniAppPage() {
   const [showWalletOverlay, setShowWalletOverlay] = useState(false);
 
   useEffect(() => {
-    try {
-      sdk.actions.ready();
-    } catch (e) {
-      // ignore if not running inside farcaster embed
-      console.warn("sdk.actions.ready failed:", e);
-    }
-  }, []);
+  console.log("miniapp: trying sdk.actions.ready()");
+  try {
+    sdk.actions.ready();
+    console.log("miniapp: ready() success");
+  } catch (e) {
+    console.warn("miniapp: ready() failed:", e);
+  }
+}, []);
 
   useEffect(() => {
     if (!isConnected || !address) return;
