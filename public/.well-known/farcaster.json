@@ -7,14 +7,7 @@
   "frame": {
     "version": "1",
     "name": "PUBS BURN",
-    "description": "PUBS BURN helps you clean your wallet by detecting and burning scam tokens in a single tap. Stay safe onchain with confidence.",
     "iconUrl": "https://pubs-burn.vercel.app/icon.png",
     "homeUrl": "https://pubs-burn.vercel.app/miniapp"
-  },
-  "requiredCapabilities": [
-    "actions.openUrl",
-    "actions.signIn",
-    "wallet.sendTransaction",
-    "wallet.getEthereumProvider"
-  ]
+  }
 }
