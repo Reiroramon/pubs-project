@@ -1,4 +1,6 @@
+// app/miniapp/page.tsx
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
@@ -14,7 +16,7 @@ const ERC20_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
 ];
 
-export default function HomePage() {
+export default function MiniAppPage() {
   const { address, isConnected } = useAccount();
   const [status, setStatus] = useState("");
   const [tokens, setTokens] = useState<any[]>([]);
@@ -27,7 +29,12 @@ export default function HomePage() {
   const [showWalletOverlay, setShowWalletOverlay] = useState(false);
 
   useEffect(() => {
-    sdk.actions.ready();
+    try {
+      sdk.actions.ready();
+    } catch (e) {
+      // ignore if not running inside farcaster embed
+      console.warn("sdk.actions.ready failed:", e);
+    }
   }, []);
 
   useEffect(() => {
@@ -76,7 +83,6 @@ export default function HomePage() {
       setTokens(baseList);
       setStatus("🟢 Select token");
 
-      // load metadata in background; typed params to avoid TS 'any' warning
       baseList.forEach(async (token: any, i: number) => {
         try {
           const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
@@ -142,10 +148,8 @@ export default function HomePage() {
     const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
     try {
-      // 1️⃣ Collect tokens that need approval
       const needApproval = selected.filter((addr) => !approvedTokens.includes(addr));
 
-      // 2️⃣ If there are tokens to approve → auto-approve them all (one by one)
       if (needApproval.length > 0) {
         for (const tokenAddress of needApproval) {
           const row = tokens.find((t) => t.address === tokenAddress);
@@ -177,24 +181,21 @@ export default function HomePage() {
             if (err?.code === 4001) setStatus("User canceled approve");
             else setStatus("Approve failed");
 
-            return; // stop on first approve failure / user cancel
+            return;
           }
 
           setShowWalletOverlay(false);
           setOverlayMessage("");
         }
 
-        // All approves done — instruct user to press Burn Now
         setStatus("🟢 All tokens approved. Tap Burn Now.");
         return;
       }
 
-      // 3️⃣ If none need approval → proceed to burn multiple
       for (const tokenAddress of selected) {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
-        // compute fee (contract may return proper fee)
         let feeWei = 0n;
         try {
           const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
@@ -203,7 +204,6 @@ export default function HomePage() {
           feeWei = ethers.parseUnits("0.0001", "ether");
         }
 
-        // burn
         try {
           setStatus(`🔥 Burning ${row.symbol}...`);
 
@@ -241,7 +241,6 @@ export default function HomePage() {
           if (err?.code === 4001) setStatus("User canceled burn");
           else setStatus("Burn failed");
 
-          // continue to next token
           continue;
         }
 
@@ -249,7 +248,6 @@ export default function HomePage() {
         setOverlayMessage("");
       }
 
-      // 4️⃣ Reset after all burns
       setApprovedTokens([]);
       setSelected([]);
       await loadTokens();
