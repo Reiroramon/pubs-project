@@ -13,7 +13,7 @@ const miniapp = {
       name: "PUBS BURN",
       url: "https://pubs-burn.vercel.app",
       splashImageUrl: "https://pubs-burn.vercel.app/icon.png",
-      splashBackgroundColor: "#000000",
+      splashBackgroundColor: "#0A0A0A",
     },
   },
 };
