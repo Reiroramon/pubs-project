@@ -1,12 +1,27 @@
 import "./globals.css";
-import Providers from "./providers";
+
+export const metadata = {
+  title: "PUBS BURN",
+  other: {
+    "fc:miniapp": JSON.stringify({
+      version: "1",
+      imageUrl: "https://pubs-burn.vercel.app/image.png",
+      button: {
+        title: "Open PUBS BURN",
+        action: {
+          type: "launch_app",
+          name: "PUBS BURN",
+          url: "https://pubs-burn.vercel.app"
+        }
+      }
+    }),
+  },
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
-        <Providers>{children}</Providers>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
