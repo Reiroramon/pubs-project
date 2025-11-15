@@ -5,14 +5,14 @@ import { Providers } from "./providers";
 
 const miniapp = {
   version: "1",
-  imageUrl: "https://pubs-burn.vercel.app/og.png",
+  imageUrl: "https://pubs-burn.vercel.app/image.png",
   button: {
     title: "Open App",
     action: {
       type: "launch_frame",
       name: "PUBS BURN",
       url: "https://pubs-burn.vercel.app",
-      splashImageUrl: "https://pubs-burn.vercel.app/icon.png",
+      splashImageUrl: "https://pubs-burn.vercel.app/splash.png",
       splashBackgroundColor: "#0A0A0A",
     },
   },
