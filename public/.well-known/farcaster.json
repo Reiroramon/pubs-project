@@ -11,6 +11,8 @@
     "splashImageUrl": "https://pubs-burn.vercel.app/splash.png",
     "splashBackgroundColor": "#0A0A0A",
     "homeUrl": "https://pubs-burn.vercel.app",
+    "imageUrl": "https://pubs-burn.vercel.app/image.png",
+    "buttonTitle": "BURN IT !",
     "webhookUrl": "https://pubs-burn.vercel.app/api/webhook",
     "subtitle": "Burn scam tokens",
     "description": "PUBS BURN helps you clean your wallet by detecting and burning scam tokens",
