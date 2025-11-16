@@ -20,6 +20,19 @@ const miniapp = {
 
 export const metadata: Metadata = {
   title: "PUBS BURN",
+  description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
+  openGraph: {
+    title: "PUBS BURN",
+    description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
+    url: "https://pubs-burn.vercel.app",
+    images: [
+      {
+        url: "https://pubs-burn.vercel.app/hero.png",
+        width: 1200,
+        height: 630,
+      },
+    ],
+  },
   other: {
     "fc:miniapp": JSON.stringify(miniapp),
   },
