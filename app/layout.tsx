@@ -5,7 +5,7 @@ import { Providers } from "./providers";
 
 const miniapp = {
   version: "1",
-  imageUrl: "https://pubs-burn.vercel.app/image.png",
+  imageUrl: "https://pubs-burn.vercel.app/image.PNG",
   button: {
     title: "Open App",
     action: {

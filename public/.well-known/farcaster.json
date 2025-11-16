@@ -23,10 +23,10 @@
       "tools",
       "burn"
     ],
-    "heroImageUrl": "https://pubs-burn.vercel.app/hero.png",
+    "heroImageUrl": "https://pubs-burn.vercel.app/hero.PNG",
     "tagline": "Remove trash tokens forever",
     "ogTitle": "Clean Your Wallet",
     "ogDescription": "Burn scam tokens instantly and protect your wallet",
-    "ogImageUrl": "https://pubs-burn.vercel.app/image.png"
+    "ogImageUrl": "https://pubs-burn.vercel.app/image.PNG"
   }
 }
