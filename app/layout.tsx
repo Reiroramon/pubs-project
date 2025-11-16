@@ -7,7 +7,7 @@ const miniapp = {
   version: "1",
   imageUrl: "https://pubs-burn.vercel.app/image.png",
   button: {
-    title: "Open App",
+    title: "BURN IT !",
     action: {
       type: "launch_frame",
       name: "PUBS BURN",
