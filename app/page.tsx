@@ -146,7 +146,7 @@ export default function MiniAppPage() {
   const shareWarpcastAuto = () => {
     sdk.actions.openUrl(
       `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}\n#SafeOnchain`
+        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}`
       )}`
     );
   };
@@ -155,7 +155,7 @@ export default function MiniAppPage() {
   const openSharePopup = () => {
     sdk.actions.openUrl(
       `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}\n#SafeOnchain`
+        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}`
       )}`
     );
   };
@@ -296,7 +296,7 @@ export default function MiniAppPage() {
     if (!lastBurnTx) return;
     sdk.actions.openUrl(
       `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}\n#SafeOnchain`
+        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}`
       )}`
     );
   };
