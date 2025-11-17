@@ -11,7 +11,8 @@
     "splashImageUrl": "https://pubs-burn.vercel.app/splash.png",
     "splashBackgroundColor": "#0A0A0A",
     "homeUrl": "https://pubs-burn.vercel.app",
-    "shareLinkUrl": "https://pubs-burn.vercel.app",
+     "castShareUrl": "https://warpcast.com/~/compose?text=Burn+your+scam+tokens+instantly+with+PUBS+BURN+https://pubs-burn.vercel.app "
+,
     "canonicalDomain": "pubs-burn.vercel.app",
     "imageUrl": "https://pubs-burn.vercel.app/image.png",
     "buttonTitle": "BURN IT !",
