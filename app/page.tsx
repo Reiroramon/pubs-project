@@ -28,6 +28,9 @@ export default function MiniAppPage() {
   const [overlaySuccess, setOverlaySuccess] = useState("");
   const [showWalletOverlay, setShowWalletOverlay] = useState(false);
 
+  // ⭐ NEW popup state
+  const [showSharePopup, setShowSharePopup] = useState(false);
+
   useEffect(() => {
     console.log("miniapp: trying sdk.actions.ready()");
     try {
@@ -136,11 +139,23 @@ export default function MiniAppPage() {
     }
   };
 
-  // ⚡ FINAL DEEP LINK SHARE (OPEN MINIAPP)
+  // ⭐ FINAL SHARE: use the correct miniapp URL provided
+  const MINIAPP_URL = "https://farcaster.xyz/miniapps/mz8cOJsCFzrX";
+
+  // ⭐ Share that opens the Warpcast composer with the correct miniapp link
   const shareWarpcastAuto = () => {
     sdk.actions.openUrl(
       `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\nwarpcast://miniapp?url=https://pubs-burn.vercel.app\n#SafeOnchain`
+        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}\n#SafeOnchain`
+      )}`
+    );
+  };
+
+  // ⭐ Popup Share button function
+  const openSharePopup = () => {
+    sdk.actions.openUrl(
+      `https://warpcast.com/~/compose?text=${encodeURIComponent(
+        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}\n#SafeOnchain`
       )}`
     );
   };
@@ -242,9 +257,10 @@ export default function MiniAppPage() {
 
           setStatus(`✅ Burned ${row.symbol} successfully!`);
 
-          // ⚡ FINAL AUTO SHARE (NO TX HASH, OPEN MINIAPP)
+          // AUTO SHARE + popup trigger
           setLastBurnTx(tx.hash);
           shareWarpcastAuto();
+          setShowSharePopup(true);
 
         } catch (err: any) {
           setOverlayLoading(false);
@@ -265,6 +281,10 @@ export default function MiniAppPage() {
       setSelected([]);
       await loadTokens();
       setStatus("🎉 All selected tokens burned successfully!");
+
+      // ⭐ Trigger popup after all burn
+      setShowSharePopup(true);
+
     } catch (outerErr: any) {
       console.error(outerErr);
       setShowWalletOverlay(false);
@@ -276,13 +296,44 @@ export default function MiniAppPage() {
     if (!lastBurnTx) return;
     sdk.actions.openUrl(
       `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\nwarpcast://miniapp?url=https://pubs-burn.vercel.app\n#SafeOnchain`
+        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\n${MINIAPP_URL}\n#SafeOnchain`
       )}`
     );
   };
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
+      
+      {/* ⭐ SHARE POPUP MODAL */}
+      {showSharePopup && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[999999]">
+          <div className="relative bg-[#111] border border-[#00FF3C50] rounded-2xl p-6 w-80 text-center shadow-xl">
+
+            <button
+              onClick={() => setShowSharePopup(false)}
+              className="absolute top-2 right-2 text-gray-400 hover:text-white text-lg"
+            >
+              ✖
+            </button>
+
+            <h2 className="text-xl font-bold text-[#00FF3C] mb-3">
+              Burn Completed 🎉
+            </h2>
+
+            <p className="text-gray-300 text-sm mb-5">
+              Share your clean wallet to Farcaster?
+            </p>
+
+            <button
+              onClick={openSharePopup}
+              className="w-full py-3 bg-[#00FF3C] rounded-xl font-semibold text-black hover:bg-[#32FF67]"
+            >
+              📣 Share on Feed
+            </button>
+          </div>
+        </div>
+      )}
+
       {showWalletOverlay && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[9999] pointer-events-none"></div>
       )}
