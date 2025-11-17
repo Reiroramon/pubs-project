@@ -5,21 +5,34 @@ import { Providers } from "./providers";
 
 const miniapp = {
   version: "1",
-  imageUrl: "https://pubs-burn.vercel.app/og.png",
+  imageUrl: "https://pubs-burn.vercel.app/image.png",
   button: {
-    title: "Open App",
+    title: "BURN IT !",
     action: {
       type: "launch_frame",
       name: "PUBS BURN",
       url: "https://pubs-burn.vercel.app",
-      splashImageUrl: "https://pubs-burn.vercel.app/icon.png",
-      splashBackgroundColor: "#000000",
+      splashImageUrl: "https://pubs-burn.vercel.app/splash.png",
+      splashBackgroundColor: "#0A0A0A",
     },
   },
 };
 
 export const metadata: Metadata = {
   title: "PUBS BURN",
+  description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
+  openGraph: {
+    title: "PUBS BURN",
+    description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
+    url: "https://pubs-burn.vercel.app",
+    images: [
+      {
+        url: "https://pubs-burn.vercel.app/hero.png",
+        width: 1200,
+        height: 630,
+      },
+    ],
+  },
   other: {
     "fc:miniapp": JSON.stringify(miniapp),
   },
