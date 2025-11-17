@@ -8,7 +8,11 @@ import { useAccount } from "wagmi";
 import { ethers } from "ethers";
 
 /**
- * PUBS BURN - Mini App Page (enhanced)
+ * PUBS BURN - Mini App Page (final)
+ *
+ * - Mode C: search (name/symbol/contract) -> auto add to middle list + auto select
+ * - Keeps existing burn / approve / scan logic intact
+ * - Option 1 behavior: add search result even if balance = 0
  */
 
 const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
@@ -20,7 +24,7 @@ const ERC20_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
 ];
 
-// Simple in-memory cache (turbo search)
+// simple in-memory caches
 const metaCache = new Map<string, any>();
 const dexCache = new Map<string, any>();
 
@@ -42,18 +46,17 @@ export default function MiniAppPage() {
 
   // search states
   const [searchInput, setSearchInput] = useState("");
-  const [searchResult, setSearchResult] = useState<any | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
 
-  // queue modal
+  // queue / analytics
   const [queueRunning, setQueueRunning] = useState(false);
   const [queueProgress, setQueueProgress] = useState({ current: 0, total: 0 });
   const [analytics, setAnalytics] = useState<any | null>(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // share helper
+  // share helper (unchanged)
   const shareToWarpcast = (txHash?: string) => {
     let msg =
       "🔥 PUBS BURN — Clean your wallet instantly!\n\n" +
@@ -65,24 +68,25 @@ export default function MiniAppPage() {
 
     msg += "\nTry it now:\nhttps://farcaster.xyz/miniapps/mz8cOJsCFzrX";
 
-    sdk.actions.openUrl(
-      "https://warpcast.com/~/compose?text=" + encodeURIComponent(msg)
-    );
+    sdk.actions.openUrl("https://warpcast.com/~/compose?text=" + encodeURIComponent(msg));
   };
 
-  // ready
+  // sdk ready
   useEffect(() => {
     try {
       sdk.actions.ready();
     } catch {}
   }, []);
-  // load tokens
+
+  // load tokens on connect
   useEffect(() => {
     if (!isConnected || !address) return;
     const t = setTimeout(() => loadTokens(), 400);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, address]);
 
+  // load tokens (original scanning logic preserved)
   const loadTokens = async () => {
     if (!address) return;
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
@@ -116,6 +120,7 @@ export default function MiniAppPage() {
           logoUrl: "/token.png",
           price: null,
           isScam: false,
+          // keep token raw object shape consistent
         }));
 
       setTokens(baseList);
@@ -124,20 +129,16 @@ export default function MiniAppPage() {
 
       baseList.forEach(async (token: any, i: number) => {
         try {
-          // metadata
-          const metaRes = await fetch(
-            `https://base-mainnet.g.alchemy.com/v2/${key}`,
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                id: 2,
-                jsonrpc: "2.0",
-                method: "alchemy_getTokenMetadata",
-                params: [token.address],
-              }),
-            }
-          );
+          const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              id: 2,
+              jsonrpc: "2.0",
+              method: "alchemy_getTokenMetadata",
+              params: [token.address],
+            }),
+          });
           const meta = await metaRes.json();
           const r = meta?.result;
           if (r) {
@@ -145,23 +146,15 @@ export default function MiniAppPage() {
             token.name = r.name || r.symbol || "Token";
             token.symbol = r.symbol || "";
             token.logoUrl = r.logo || "/token.png";
-            token.balance = ethers.formatUnits(
-              token.rawBalance,
-              token.decimals
-            );
+            token.balance = ethers.formatUnits(token.rawBalance, token.decimals);
           }
 
-          // price/logo
           try {
-            const priceRes = await fetch(
-              `https://api.dexscreener.com/latest/dex/tokens/${token.address}`
-            );
+            const priceRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.address}`);
             const priceJ = await priceRes.json();
-
             token.price = priceJ?.pairs?.[0]?.priceUsd ?? null;
             const img = priceJ?.pairs?.[0]?.info?.imageUrl;
             if (img) token.logoUrl = img;
-
             token.isScam = !token.price || Number(token.price) === 0;
           } catch {
             token.price = null;
@@ -185,49 +178,33 @@ export default function MiniAppPage() {
     }
   };
 
-  // ------------------ BURN ------------------
+  // ---------- BURN (kept intact, with fallback checks) ----------
   const burn = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
     setStatus("🔥 Starting process...");
 
-    const provider = new ethers.BrowserProvider(
-      (sdk as any).wallet.ethProvider as any
-    );
+    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(CONTRACT, ABI, signer);
     const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
     try {
-      const needApproval = selected.filter(
-        (addr) => !approvedTokens.includes(addr)
-      );
+      const needApproval = selected.filter((addr) => !approvedTokens.includes(addr));
 
-      // APPROVAL
+      // APPROVAL flow (unchanged)
       if (needApproval.length > 0) {
         for (const tokenAddress of needApproval) {
-          const row =
-            tokens.find((t) => t.address === tokenAddress) ||
-            filteredTokens.find((t) => t.address === tokenAddress);
+          const row = tokens.find((t) => t.address === tokenAddress) || filteredTokens.find((t) => t.address === tokenAddress);
           if (!row) continue;
 
           try {
             setStatus(`🧾 Approving ${row.symbol}...`);
             setShowWalletOverlay(true);
-            setOverlayMessage(
-              `Waiting wallet popup to approve ${row.symbol}...`
-            );
+            setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
             setOverlayLoading(true);
 
-            const tokenContract = new ethers.Contract(
-              row.address,
-              ERC20_ABI,
-              signer
-            );
-            const tx = await tokenContract.approve(
-              CONTRACT,
-              row.rawBalance,
-              { gasLimit: 200_000n }
-            );
+            const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+            const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
 
             setOverlayMessage(`Confirming ${row.symbol} approval...`);
             await rpc.waitForTransaction(tx.hash);
@@ -252,25 +229,20 @@ export default function MiniAppPage() {
         return;
       }
 
-      // MULTI BURN
+      // MULTI burn queue
       if (selected.length > 1) {
         await runBurnQueue([...selected]);
         return;
       }
 
-      // SINGLE BURN
+      // SINGLE burn
       for (const tokenAddress of selected) {
-        const row =
-          tokens.find((t) => t.address === tokenAddress) ||
-          filteredTokens.find((t) => t.address === tokenAddress);
+        const row = tokens.find((t) => t.address === tokenAddress) || filteredTokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
         let feeWei = 0n;
         try {
-          const [feeRequired] = await contract.quoteErc20Fee(
-            row.address,
-            row.rawBalance
-          );
+          const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
           feeWei = feeRequired;
         } catch {
           feeWei = ethers.parseUnits("0.0001", "ether");
@@ -279,28 +251,15 @@ export default function MiniAppPage() {
         try {
           setStatus(`🔥 Burning ${row.symbol}...`);
           setShowWalletOverlay(true);
-          setOverlayMessage(
-            `Waiting wallet popup to burn ${row.symbol}...`
-          );
+          setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
           setOverlayLoading(true);
 
           const iface = new ethers.Interface(ABI);
-          const data = iface.encodeFunctionData("burnToken", [
-            row.address,
-            row.rawBalance,
-            JSON.stringify({ safe: true }),
-          ]);
+          const data = iface.encodeFunctionData("burnToken", [row.address, row.rawBalance, JSON.stringify({ safe: true })]);
 
-          const tx = await signer.sendTransaction({
-            to: CONTRACT,
-            data,
-            value: feeWei,
-            gasLimit: 350_000n,
-          });
+          const tx = await signer.sendTransaction({ to: CONTRACT, data, value: feeWei, gasLimit: 350_000n });
 
-          setOverlayMessage(
-            `Waiting burn confirmation for ${row.symbol}...`
-          );
+          setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
           await rpc.waitForTransaction(tx.hash);
 
           setOverlayLoading(false);
@@ -314,8 +273,7 @@ export default function MiniAppPage() {
         } catch (err: any) {
           setOverlayLoading(false);
           setShowWalletOverlay(false);
-          if (err?.code === 4001)
-            setStatus("User canceled burn");
+          if (err?.code === 4001) setStatus("User canceled burn");
           else setStatus("Burn failed");
           continue;
         }
@@ -335,14 +293,12 @@ export default function MiniAppPage() {
     }
   };
 
-  // ----------------- RUN BURN QUEUE -----------------
+  // run burn queue (unchanged semantics)
   const runBurnQueue = async (queue: string[]) => {
     setQueueRunning(true);
     setQueueProgress({ current: 0, total: queue.length });
 
-    const provider = new ethers.BrowserProvider(
-      (sdk as any).wallet.ethProvider as any
-    );
+    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(CONTRACT, ABI, signer);
     const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
@@ -354,9 +310,7 @@ export default function MiniAppPage() {
       const ca = queue[i];
       setQueueProgress({ current: i + 1, total: queue.length });
 
-      const row =
-        tokens.find((t) => t.address === ca) ||
-        filteredTokens.find((t) => t.address === ca);
+      const row = tokens.find((t) => t.address === ca) || filteredTokens.find((t) => t.address === ca);
       if (!row) continue;
 
       try {
@@ -364,35 +318,22 @@ export default function MiniAppPage() {
 
         let feeWei = 0n;
         try {
-          const [feeRequired] = await contract.quoteErc20Fee(
-            row.address,
-            row.rawBalance
-          );
+          const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
           feeWei = feeRequired;
         } catch {
           feeWei = ethers.parseUnits("0.0001", "ether");
         }
 
         const iface = new ethers.Interface(ABI);
-        const data = iface.encodeFunctionData("burnToken", [
-          row.address,
-          row.rawBalance,
-          JSON.stringify({ safe: true }),
-        ]);
+        const data = iface.encodeFunctionData("burnToken", [row.address, row.rawBalance, JSON.stringify({ safe: true })]);
 
-        const tx = await signer.sendTransaction({
-          to: CONTRACT,
-          data,
-          value: feeWei,
-          gasLimit: 350_000n,
-        });
+        const tx = await signer.sendTransaction({ to: CONTRACT, data, value: feeWei, gasLimit: 350_000n });
 
         await rpc.waitForTransaction(tx.hash);
 
         burnedItems.push({ token: row, txHash: tx.hash });
         if (row.price) {
-          const usd =
-            Number(row.price) * Number(row.balance || 0);
+          const usd = Number(row.price) * Number(row.balance || 0);
           totalUsd += isNaN(usd) ? 0 : usd;
         }
 
@@ -405,10 +346,7 @@ export default function MiniAppPage() {
     setQueueRunning(false);
     setQueueProgress({ current: 0, total: 0 });
 
-    setAnalytics({
-      count: burnedItems.length,
-      totalUsd: totalUsd.toFixed(2),
-    });
+    setAnalytics({ count: burnedItems.length, totalUsd: totalUsd.toFixed(2) });
 
     setSelected([]);
     setApprovedTokens([]);
@@ -416,10 +354,11 @@ export default function MiniAppPage() {
     setStatus("🎉 All selected tokens burned successfully!");
   };
 
-  // ----------------- SEARCH -----------------
+  // ----------------- SEARCH (auto-add + auto-select) -----------------
   const handleSearch = async () => {
     setSearchError("");
-    setSearchResult(null);
+    setSearchLoading(false);
+
     const qRaw = searchInput.trim();
     if (!qRaw) {
       setFilteredTokens(tokens);
@@ -427,19 +366,20 @@ export default function MiniAppPage() {
     }
     const q = qRaw.toLowerCase();
 
-    // local search
-    const local = tokens.filter(
-      (t) =>
-        (t.name || "").toLowerCase().includes(q) ||
-        (t.symbol || "").toLowerCase().includes(q)
-    );
+    // local name/symbol match first
+    const local = tokens.filter((t) => (t.name || "").toLowerCase().includes(q) || (t.symbol || "").toLowerCase().includes(q));
     if (local.length > 0) {
       setFilteredTokens(local);
-      setSearchResult(null);
+      // auto-select local matches (merge)
+      setSelected((prev) => {
+        const addrs = local.map((x) => x.address);
+        const merged = Array.from(new Set([...prev, ...addrs]));
+        return merged;
+      });
       return;
     }
 
-    // exact CA
+    // try contract address
     const isAddress = /^0x[a-f0-9]{40}$/i.test(q);
     if (!isAddress) {
       setFilteredTokens([]);
@@ -447,15 +387,18 @@ export default function MiniAppPage() {
       return;
     }
 
+    // cached meta
     if (metaCache.has(q)) {
       const cached = metaCache.get(q);
-      setSearchResult(cached);
+      // ensure tokens list contains it
+      setTokens((prev) => {
+        const found = prev.find((p) => p.address.toLowerCase() === q);
+        if (found) return prev;
+        return [cached, ...prev];
+      });
       setFilteredTokens([cached]);
-
-      // AUTO SELECT
-      setSelected((prev) =>
-        prev.includes(q) ? prev : [...prev, q]
-      );
+      // auto-select
+      setSelected((prev) => (prev.includes(q) ? prev : [...prev, q]));
       return;
     }
 
@@ -468,20 +411,17 @@ export default function MiniAppPage() {
         return;
       }
 
-      // fetch metadata
-      const metaRes = await fetch(
-        `https://base-mainnet.g.alchemy.com/v2/${key}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            id: 99,
-            jsonrpc: "2.0",
-            method: "alchemy_getTokenMetadata",
-            params: [q],
-          }),
-        }
-      );
+      // Alchemy token metadata
+      const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: 99,
+          jsonrpc: "2.0",
+          method: "alchemy_getTokenMetadata",
+          params: [q],
+        }),
+      });
       const metaJ = await metaRes.json();
       const r = metaJ?.result;
       if (!r) {
@@ -490,7 +430,7 @@ export default function MiniAppPage() {
         return;
       }
 
-      // DexScreener
+      // DexScreener for price/logo
       let price = null;
       let logo = r.logo || "/token.png";
       try {
@@ -499,9 +439,7 @@ export default function MiniAppPage() {
           price = dexCached.price;
           logo = dexCached.logo || logo;
         } else {
-          const dexRes = await fetch(
-            `https://api.dexscreener.com/latest/dex/tokens/${q}`
-          );
+          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${q}`);
           const dexJ = await dexRes.json();
           price = dexJ?.pairs?.[0]?.priceUsd ?? null;
           const img = dexJ?.pairs?.[0]?.info?.imageUrl;
@@ -510,38 +448,30 @@ export default function MiniAppPage() {
         }
       } catch {}
 
-      // Balance
+      // fetch balance for this wallet
       let rawBalance = 0n;
       let balance = "0";
       try {
-        const balRes = await fetch(
-          `https://base-mainnet.g.alchemy.com/v2/${key}`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: 2,
-              jsonrpc: "2.0",
-              method: "alchemy_getTokenBalances",
-              params: [address],
-            }),
-          }
-        );
+        const balRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: 2,
+            jsonrpc: "2.0",
+            method: "alchemy_getTokenBalances",
+            params: [address],
+          }),
+        });
         const balJ = await balRes.json();
         const all = balJ?.result?.tokenBalances ?? [];
-        const found = all.find(
-          (t: any) =>
-            (t.contractAddress ?? "").toLowerCase() === q
-        );
+        const found = all.find((t: any) => (t.contractAddress ?? "").toLowerCase() === q);
         if (found) {
           rawBalance = BigInt(found.tokenBalance);
-          balance = ethers.formatUnits(
-            rawBalance,
-            r.decimals ?? 18
-          );
+          balance = ethers.formatUnits(rawBalance, r.decimals ?? 18);
         }
       } catch {}
 
+      // simple risk
       let risk: "Low" | "Medium" | "High" = "Low";
       if (!price || Number(price) === 0) risk = "High";
 
@@ -559,14 +489,26 @@ export default function MiniAppPage() {
         fetchedAt: Date.now(),
       };
 
+      // cache + add to tokens list (AUTO ADD)
       metaCache.set(q, result);
-      setSearchResult(result);
-      setFilteredTokens([result]);
 
-      // 💥 AUTO SELECT TANPA ADD TO LIST
-      setSelected((prev) =>
-        prev.includes(q) ? prev : [...prev, q]
-      );
+      setTokens((prev) => {
+        // add to front if not present
+        const found = prev.find((p) => p.address.toLowerCase() === q);
+        if (found) return prev;
+        return [result, ...prev];
+      });
+
+      // show in filtered tokens (the middle list shows this result + others if previously filtered)
+      setFilteredTokens((prev) => {
+        // if previously showing a filtered set from scan, merge by placing result at top
+        const exists = prev.find((p) => p.address.toLowerCase() === q);
+        if (exists) return prev;
+        return [result, ...prev];
+      });
+
+      // AUTO-SELECT (option 1 behavior)
+      setSelected((prev) => (prev.includes(q) ? prev : [...prev, q]));
     } catch (err) {
       console.error("SEARCH ERROR", err);
       setSearchError("Search failed");
@@ -575,17 +517,13 @@ export default function MiniAppPage() {
     }
   };
 
-  // ======================= UI ============================
+  // UI
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
-      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">
-        PUBS BURN
-      </h1>
+      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
 
       <p className="text-sm text-gray-400 mb-2 text-center">
-        {address
-          ? `${address.slice(0, 6)}…${address.slice(-4)}`
-          : "Connecting wallet..."}
+        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
 
       {/* SEARCH INPUT */}
@@ -598,38 +536,24 @@ export default function MiniAppPage() {
             placeholder="Search token (name or contract)"
             className="flex-1 px-4 py-3 rounded-xl bg-[#0F0F0F] border border-[#00FF3C30] text-white placeholder-gray-500"
           />
-          <button
-            onClick={handleSearch}
-            disabled={searchLoading}
-            className="px-4 py-3 rounded-xl bg-[#00FF3C] text-black font-semibold"
-          >
+          <button onClick={handleSearch} disabled={searchLoading} className="px-4 py-3 rounded-xl bg-[#00FF3C] text-black font-semibold">
             {searchLoading ? "..." : "Search"}
           </button>
         </div>
 
-        {searchError && (
-          <p className="text-red-500 text-xs mt-2">{searchError}</p>
-        )}
+        {searchError && <p className="text-red-500 text-xs mt-2">{searchError}</p>}
       </div>
 
-      {/* TOKEN LIST */}
+      {/* TOKEN LIST (middle list) */}
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
         <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111]">
-          <div className="text-xs text-[#FF4A4A]">
-            ALWAYS VERIFY BEFORE BURN 🚨
-          </div>
+          <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN 🚨</div>
 
           <button
-            onClick={() =>
-              selected.length === filteredTokens.length
-                ? setSelected([])
-                : setSelected(filteredTokens.map((t) => t.address))
-            }
+            onClick={() => (selected.length === filteredTokens.length ? setSelected([]) : setSelected(filteredTokens.map((t) => t.address)))}
             className="text-xs text-[#00FF3C]"
           >
-            {selected.length === filteredTokens.length
-              ? "Unselect All"
-              : "Select All"}
+            {selected.length === filteredTokens.length ? "Unselect All" : "Select All"}
           </button>
         </div>
 
@@ -639,49 +563,27 @@ export default function MiniAppPage() {
             return (
               <button
                 key={t.address}
-                onClick={() =>
-                  setSelected(
-                    active
-                      ? selected.filter((x) => x !== t.address)
-                      : [...selected, t.address]
-                  )
-                }
-                className={`flex items-center w-full px-4 py-3 ${
-                  active ? "bg-[#132A18]" : ""
-                }`}
+                onClick={() => setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])}
+                className={`flex items-center w-full px-4 py-3 ${active ? "bg-[#132A18]" : ""}`}
               >
-                <img
-                  src={t.logoUrl}
-                  className="w-7 h-7 rounded-full mr-3"
-                />
+                <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
 
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
-                    {(t.risk === "High" || t.isScam) && (
-                      <span className="text-[10px] text-red-400 ml-1">
-                        🚨
-                      </span>
-                    )}
+                    {(t.risk === "High" || t.isScam) && <span className="text-[10px] text-red-400 ml-1">🚨</span>}
                   </div>
                   <div className="text-xs text-gray-400 truncate">
-                    {t.symbol} •{" "}
-                    {Number(t.balance || 0).toFixed(4)}
+                    {t.symbol} • {Number(t.balance || 0).toFixed(4)}
                   </div>
                 </div>
 
-                <div
-                  className={`text-sm ${
-                    t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"
-                  }`}
-                >
+                <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
                   {t.price ? `$${t.price}` : "0.00"}
                 </div>
 
                 <div className="ml-3 w-5 h-5 rounded border border-[#00FF3C] flex items-center justify-center">
-                  {active && (
-                    <div className="w-3 h-3 rounded bg-[#00FF3C]" />
-                  )}
+                  {active && <div className="w-3 h-3 rounded bg-[#00FF3C]" />}
                 </div>
               </button>
             );
@@ -692,25 +594,12 @@ export default function MiniAppPage() {
         <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
           <button
             onClick={burn}
-            className={`w-full py-3 rounded-xl font-bold ${
-              selected.every((s) => approvedTokens.includes(s))
-                ? "bg-[#00FF3C] text-black"
-                : "bg-[#FFB800] text-black"
-            }`}
+            className={`w-full py-3 rounded-xl font-bold ${selected.every((s) => approvedTokens.includes(s)) ? "bg-[#00FF3C] text-black" : "bg-[#FFB800] text-black"}`}
           >
-            {selected.length === 0
-              ? "Select token first"
-              : selected.every((s) =>
-                  approvedTokens.includes(s)
-                )
-              ? `Burn Now (${selected.length})`
-              : `Approve Selected (${selected.length})`}
+            {selected.length === 0 ? "Select token first" : selected.every((s) => approvedTokens.includes(s)) ? `Burn Now (${selected.length})` : `Approve Selected (${selected.length})`}
           </button>
 
-          <button
-            onClick={loadTokens}
-            className="w-full py-3 bg-[#2F2F2F] rounded-xl font-semibold text-[#EAEAEA]"
-          >
+          <button onClick={loadTokens} className="w-full py-3 bg-[#2F2F2F] rounded-xl font-semibold text-[#EAEAEA]">
             Scan / Refresh Tokens
           </button>
         </div>
@@ -718,35 +607,26 @@ export default function MiniAppPage() {
 
       {/* SHARE */}
       {lastBurnTx && (
-        <button
-          onClick={() => shareToWarpcast(lastBurnTx)}
-          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] rounded-xl font-bold text-black"
-        >
+        <button onClick={() => shareToWarpcast(lastBurnTx)} className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] rounded-xl font-bold text-black">
           📣 Share on Warpcast
         </button>
       )}
 
-      <p className="text-center text-sm text-gray-400 mt-4">
-        {status}
-      </p>
+      <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
 
       {/* WALLET OVERLAY */}
       {overlayLoading && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
           <div className="flex flex-col items-center">
             <div className="h-12 w-12 border-4 border-gray-300 border-t-[#00FF3C] rounded-full animate-spin" />
-            <p className="mt-4 text-white text-sm">
-              {overlayMessage}
-            </p>
+            <p className="mt-4 text-white text-sm">{overlayMessage}</p>
           </div>
         </div>
       )}
 
       {overlaySuccess && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[999999]">
-          <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">
-            {overlaySuccess}
-          </div>
+          <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">{overlaySuccess}</div>
         </div>
       )}
 
@@ -754,26 +634,10 @@ export default function MiniAppPage() {
       {queueRunning && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000000]">
           <div className="w-[90%] max-w-md p-6 bg-[#0B0B0B] rounded-xl border border-[#00FF3C30]">
-            <div className="text-lg font-bold">
-              Burning tokens — progress
-            </div>
-            <div className="text-sm text-gray-400 mt-2">
-              {queueProgress.current} / {queueProgress.total}
-            </div>
+            <div className="text-lg font-bold">Burning tokens — progress</div>
+            <div className="text-sm text-gray-400 mt-2">{queueProgress.current} / {queueProgress.total}</div>
             <div className="mt-4 w-full bg-[#111] rounded-full h-3">
-              <div
-                className="h-3 rounded-full bg-[#00FF3C]"
-                style={{
-                  width:
-                    queueProgress.total === 0
-                      ? "0%"
-                      : `${Math.round(
-                          (queueProgress.current /
-                            queueProgress.total) *
-                            100
-                        )}%`,
-                }}
-              />
+              <div className="h-3 rounded-full bg-[#00FF3C]" style={{ width: queueProgress.total === 0 ? "0%" : `${Math.round((queueProgress.current / queueProgress.total) * 100)}%` }} />
             </div>
           </div>
         </div>
@@ -783,37 +647,13 @@ export default function MiniAppPage() {
       {analytics && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000000]">
           <div className="w-[90%] max-w-sm p-6 bg-[#0B0B0B] rounded-xl border border-[#00FF3C30]">
-            <div className="text-xl font-bold">
-              Burn Summary
-            </div>
-            <div className="mt-3 text-sm text-gray-300">
-              Tokens burned:{" "}
-              <span className="font-semibold">
-                {analytics.count}
-              </span>
-            </div>
-            <div className="mt-2 text-sm text-gray-300">
-              Estimated value removed:{" "}
-              <span className="font-semibold">
-                ${analytics.totalUsd}
-              </span>
-            </div>
+            <div className="text-xl font-bold">Burn Summary</div>
+            <div className="mt-3 text-sm text-gray-300">Tokens burned: <span className="font-semibold">{analytics.count}</span></div>
+            <div className="mt-2 text-sm text-gray-300">Estimated value removed: <span className="font-semibold">${analytics.totalUsd}</span></div>
 
             <div className="mt-4 flex gap-2">
-              <button
-                onClick={() =>
-                  shareToWarpcast(lastBurnTx || undefined)
-                }
-                className="flex-1 py-2 rounded-xl bg-[#00FF3C] text-black font-bold"
-              >
-                Share Result
-              </button>
-              <button
-                onClick={() => setAnalytics(null)}
-                className="py-2 px-3 rounded-xl bg-[#2F2F2F] text-[#EAEAEA]"
-              >
-                Close
-              </button>
+              <button onClick={() => shareToWarpcast(lastBurnTx || undefined)} className="flex-1 py-2 rounded-xl bg-[#00FF3C] text-black font-bold">Share Result</button>
+              <button onClick={() => setAnalytics(null)} className="py-2 px-3 rounded-xl bg-[#2F2F2F] text-[#EAEAEA]">Close</button>
             </div>
           </div>
         </div>
