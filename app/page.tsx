@@ -9,19 +9,6 @@ import { ethers } from "ethers";
 
 /**
  * PUBS BURN - Mini App Page (enhanced)
- *
- * Features added:
- *  - Full Search Panel (name / symbol / contract)
- *  - Contract lookup via Alchemy (metadata) + DexScreener (price+logo)
- *  - Simple Risk Score (Low / Medium / High) + small red badge for high risk
- *  - Honeypot check (basic check: no price / no pairs -> high risk)
- *  - Turbo Search cache
- *  - Clipboard smart-paste when input focused (auto fill CA)
- *  - Add-to-list action from Search Panel
- *  - Auto-Burn Queue with popup progress (modal)
- *  - Post-Burn Analytics popup (summary)
- *
- * NOTE: core burn/approve/loadTokens logic preserved (only integrated with new features).
  */
 
 const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
@@ -40,7 +27,7 @@ const dexCache = new Map<string, any>();
 export default function MiniAppPage() {
   const { address, isConnected } = useAccount();
 
-  // core states (existing)
+  // core states
   const [status, setStatus] = useState("");
   const [tokens, setTokens] = useState<any[]>([]);
   const [filteredTokens, setFilteredTokens] = useState<any[]>([]);
@@ -53,22 +40,20 @@ export default function MiniAppPage() {
   const [overlaySuccess, setOverlaySuccess] = useState("");
   const [showWalletOverlay, setShowWalletOverlay] = useState(false);
 
-  // SEARCH & PANEL states
+  // search states
   const [searchInput, setSearchInput] = useState("");
-  const [searchResult, setSearchResult] = useState<any | null>(null); // metadata object from CA or local
+  const [searchResult, setSearchResult] = useState<any | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const [cacheTTL] = useState(30 * 60 * 1000); // 30 minutes TTL (we'll not implement expiry persistence here)
 
-  // AUTO-BURN QUEUE states (progress modal)
+  // queue modal
   const [queueRunning, setQueueRunning] = useState(false);
   const [queueProgress, setQueueProgress] = useState({ current: 0, total: 0 });
-  const [analytics, setAnalytics] = useState<any | null>(null); // post-burn summary
+  const [analytics, setAnalytics] = useState<any | null>(null);
 
-  // refs
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // share helper (existing PRO)
+  // share helper
   const shareToWarpcast = (txHash?: string) => {
     let msg =
       "🔥 PUBS BURN — Clean your wallet instantly!\n\n" +
@@ -91,13 +76,11 @@ export default function MiniAppPage() {
       sdk.actions.ready();
     } catch {}
   }, []);
-
-  // load tokens originally (unchanged logic), but keep filteredTokens in sync
+  // load tokens
   useEffect(() => {
     if (!isConnected || !address) return;
     const t = setTimeout(() => loadTokens(), 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, address]);
 
   const loadTokens = async () => {
@@ -142,16 +125,19 @@ export default function MiniAppPage() {
       baseList.forEach(async (token: any, i: number) => {
         try {
           // metadata
-          const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: 2,
-              jsonrpc: "2.0",
-              method: "alchemy_getTokenMetadata",
-              params: [token.address],
-            }),
-          });
+          const metaRes = await fetch(
+            `https://base-mainnet.g.alchemy.com/v2/${key}`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                id: 2,
+                jsonrpc: "2.0",
+                method: "alchemy_getTokenMetadata",
+                params: [token.address],
+              }),
+            }
+          );
           const meta = await metaRes.json();
           const r = meta?.result;
           if (r) {
@@ -159,7 +145,10 @@ export default function MiniAppPage() {
             token.name = r.name || r.symbol || "Token";
             token.symbol = r.symbol || "";
             token.logoUrl = r.logo || "/token.png";
-            token.balance = ethers.formatUnits(token.rawBalance, token.decimals);
+            token.balance = ethers.formatUnits(
+              token.rawBalance,
+              token.decimals
+            );
           }
 
           // price/logo
@@ -196,32 +185,49 @@ export default function MiniAppPage() {
     }
   };
 
-  // ---------- BURN logic (kept intact) ----------
+  // ------------------ BURN ------------------
   const burn = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
     setStatus("🔥 Starting process...");
 
-    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
+    const provider = new ethers.BrowserProvider(
+      (sdk as any).wallet.ethProvider as any
+    );
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(CONTRACT, ABI, signer);
     const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
     try {
-      const needApproval = selected.filter((addr) => !approvedTokens.includes(addr));
+      const needApproval = selected.filter(
+        (addr) => !approvedTokens.includes(addr)
+      );
 
+      // APPROVAL
       if (needApproval.length > 0) {
-        // APPROVE logic unchanged (but included)
         for (const tokenAddress of needApproval) {
-          const row = tokens.find((t) => t.address === tokenAddress);
+          const row =
+            tokens.find((t) => t.address === tokenAddress) ||
+            filteredTokens.find((t) => t.address === tokenAddress);
           if (!row) continue;
+
           try {
             setStatus(`🧾 Approving ${row.symbol}...`);
             setShowWalletOverlay(true);
-            setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
+            setOverlayMessage(
+              `Waiting wallet popup to approve ${row.symbol}...`
+            );
             setOverlayLoading(true);
 
-            const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
-            const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
+            const tokenContract = new ethers.Contract(
+              row.address,
+              ERC20_ABI,
+              signer
+            );
+            const tx = await tokenContract.approve(
+              CONTRACT,
+              row.rawBalance,
+              { gasLimit: 200_000n }
+            );
 
             setOverlayMessage(`Confirming ${row.symbol} approval...`);
             await rpc.waitForTransaction(tx.hash);
@@ -246,20 +252,25 @@ export default function MiniAppPage() {
         return;
       }
 
-      // if multiple selected -> run queue modal (progress)
+      // MULTI BURN
       if (selected.length > 1) {
-        await runBurnQueue(Array.from(selected));
+        await runBurnQueue([...selected]);
         return;
       }
 
-      // single burn (existing flow)
+      // SINGLE BURN
       for (const tokenAddress of selected) {
-        const row = tokens.find((t) => t.address === tokenAddress);
+        const row =
+          tokens.find((t) => t.address === tokenAddress) ||
+          filteredTokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
         let feeWei = 0n;
         try {
-          const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+          const [feeRequired] = await contract.quoteErc20Fee(
+            row.address,
+            row.rawBalance
+          );
           feeWei = feeRequired;
         } catch {
           feeWei = ethers.parseUnits("0.0001", "ether");
@@ -268,7 +279,9 @@ export default function MiniAppPage() {
         try {
           setStatus(`🔥 Burning ${row.symbol}...`);
           setShowWalletOverlay(true);
-          setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
+          setOverlayMessage(
+            `Waiting wallet popup to burn ${row.symbol}...`
+          );
           setOverlayLoading(true);
 
           const iface = new ethers.Interface(ABI);
@@ -285,7 +298,9 @@ export default function MiniAppPage() {
             gasLimit: 350_000n,
           });
 
-          setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
+          setOverlayMessage(
+            `Waiting burn confirmation for ${row.symbol}...`
+          );
           await rpc.waitForTransaction(tx.hash);
 
           setOverlayLoading(false);
@@ -299,7 +314,8 @@ export default function MiniAppPage() {
         } catch (err: any) {
           setOverlayLoading(false);
           setShowWalletOverlay(false);
-          if (err?.code === 4001) setStatus("User canceled burn");
+          if (err?.code === 4001)
+            setStatus("User canceled burn");
           else setStatus("Burn failed");
           continue;
         }
@@ -319,12 +335,14 @@ export default function MiniAppPage() {
     }
   };
 
-  // ----------------- RUN BURN QUEUE (Auto Burn Queue + progress modal) -----------------
+  // ----------------- RUN BURN QUEUE -----------------
   const runBurnQueue = async (queue: string[]) => {
     setQueueRunning(true);
     setQueueProgress({ current: 0, total: queue.length });
 
-    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
+    const provider = new ethers.BrowserProvider(
+      (sdk as any).wallet.ethProvider as any
+    );
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(CONTRACT, ABI, signer);
     const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
@@ -336,15 +354,20 @@ export default function MiniAppPage() {
       const ca = queue[i];
       setQueueProgress({ current: i + 1, total: queue.length });
 
-      const row = tokens.find((t) => t.address === ca) || filteredTokens.find((t) => t.address === ca);
+      const row =
+        tokens.find((t) => t.address === ca) ||
+        filteredTokens.find((t) => t.address === ca);
       if (!row) continue;
 
       try {
         setStatus(`🔥 Burning ${row.symbol || row.address} ...`);
-        // estimate fee
+
         let feeWei = 0n;
         try {
-          const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+          const [feeRequired] = await contract.quoteErc20Fee(
+            row.address,
+            row.rawBalance
+          );
           feeWei = feeRequired;
         } catch {
           feeWei = ethers.parseUnits("0.0001", "ether");
@@ -368,36 +391,32 @@ export default function MiniAppPage() {
 
         burnedItems.push({ token: row, txHash: tx.hash });
         if (row.price) {
-          const usd = Number(row.price) * Number(row.balance || 0);
+          const usd =
+            Number(row.price) * Number(row.balance || 0);
           totalUsd += isNaN(usd) ? 0 : usd;
         }
 
-        // small delay UI smoothing
         await new Promise((res) => setTimeout(res, 700));
       } catch (e) {
-        // continue queue on error
         console.error("QUEUE ITEM FAILED", e);
       }
     }
 
-    // queue finished
     setQueueRunning(false);
     setQueueProgress({ current: 0, total: 0 });
 
-    // analytics summary
     setAnalytics({
       count: burnedItems.length,
       totalUsd: totalUsd.toFixed(2),
     });
 
-    // reset
     setSelected([]);
     setApprovedTokens([]);
     await loadTokens();
     setStatus("🎉 All selected tokens burned successfully!");
   };
 
-  // ----------------- SEARCH (Full Panel + CA lookup + caching + honeypot) -----------------
+  // ----------------- SEARCH -----------------
   const handleSearch = async () => {
     setSearchError("");
     setSearchResult(null);
@@ -408,7 +427,7 @@ export default function MiniAppPage() {
     }
     const q = qRaw.toLowerCase();
 
-    // 1) local name/symbol match
+    // local search
     const local = tokens.filter(
       (t) =>
         (t.name || "").toLowerCase().includes(q) ||
@@ -420,24 +439,26 @@ export default function MiniAppPage() {
       return;
     }
 
-    // 2) maybe contract address?
+    // exact CA
     const isAddress = /^0x[a-f0-9]{40}$/i.test(q);
     if (!isAddress) {
-      // nothing
       setFilteredTokens([]);
-      setSearchError("Not found (try exact contract address)");
+      setSearchError("Not found (try contract address)");
       return;
     }
 
-    // check cache
     if (metaCache.has(q)) {
       const cached = metaCache.get(q);
       setSearchResult(cached);
       setFilteredTokens([cached]);
+
+      // AUTO SELECT
+      setSelected((prev) =>
+        prev.includes(q) ? prev : [...prev, q]
+      );
       return;
     }
 
-    // perform fetch
     setSearchLoading(true);
     try {
       const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
@@ -447,17 +468,20 @@ export default function MiniAppPage() {
         return;
       }
 
-      // Alchemy metadata
-      const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id: 99,
-          jsonrpc: "2.0",
-          method: "alchemy_getTokenMetadata",
-          params: [q],
-        }),
-      });
+      // fetch metadata
+      const metaRes = await fetch(
+        `https://base-mainnet.g.alchemy.com/v2/${key}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: 99,
+            jsonrpc: "2.0",
+            method: "alchemy_getTokenMetadata",
+            params: [q],
+          }),
+        }
+      );
       const metaJ = await metaRes.json();
       const r = metaJ?.result;
       if (!r) {
@@ -466,7 +490,7 @@ export default function MiniAppPage() {
         return;
       }
 
-      // DexScreener price+logo
+      // DexScreener
       let price = null;
       let logo = r.logo || "/token.png";
       try {
@@ -475,7 +499,9 @@ export default function MiniAppPage() {
           price = dexCached.price;
           logo = dexCached.logo || logo;
         } else {
-          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${q}`);
+          const dexRes = await fetch(
+            `https://api.dexscreener.com/latest/dex/tokens/${q}`
+          );
           const dexJ = await dexRes.json();
           price = dexJ?.pairs?.[0]?.priceUsd ?? null;
           const img = dexJ?.pairs?.[0]?.info?.imageUrl;
@@ -484,33 +510,38 @@ export default function MiniAppPage() {
         }
       } catch {}
 
-      // balance of this wallet for token (if address present)
+      // Balance
       let rawBalance = 0n;
       let balance = "0";
       try {
-        const balRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            id: 2,
-            jsonrpc: "2.0",
-            method: "alchemy_getTokenBalances",
-            params: [address],
-          }),
-        });
+        const balRes = await fetch(
+          `https://base-mainnet.g.alchemy.com/v2/${key}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              id: 2,
+              jsonrpc: "2.0",
+              method: "alchemy_getTokenBalances",
+              params: [address],
+            }),
+          }
+        );
         const balJ = await balRes.json();
         const all = balJ?.result?.tokenBalances ?? [];
-        const found = all.find((t: any) => (t.contractAddress ?? "").toLowerCase() === q);
+        const found = all.find(
+          (t: any) =>
+            (t.contractAddress ?? "").toLowerCase() === q
+        );
         if (found) {
           rawBalance = BigInt(found.tokenBalance);
-          balance = ethers.formatUnits(rawBalance, r.decimals ?? 18);
+          balance = ethers.formatUnits(
+            rawBalance,
+            r.decimals ?? 18
+          );
         }
       } catch {}
 
-      // HONEYPOT / RISK simple checks
-      // - no price => High risk
-      // - dexscreener has no pairs => High risk
-      // - price === 0 => High risk
       let risk: "Low" | "Medium" | "High" = "Low";
       if (!price || Number(price) === 0) risk = "High";
 
@@ -528,10 +559,14 @@ export default function MiniAppPage() {
         fetchedAt: Date.now(),
       };
 
-      // cache
       metaCache.set(q, result);
       setSearchResult(result);
       setFilteredTokens([result]);
+
+      // 💥 AUTO SELECT TANPA ADD TO LIST
+      setSelected((prev) =>
+        prev.includes(q) ? prev : [...prev, q]
+      );
     } catch (err) {
       console.error("SEARCH ERROR", err);
       setSearchError("Search failed");
@@ -540,131 +575,49 @@ export default function MiniAppPage() {
     }
   };
 
-  // auto-fill clipboard when input focused (Auto Fill Search)
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    const handleFocus = async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (/^0x[a-f0-9]{40}$/i.test(text)) {
-          setSearchInput(text);
-        }
-      } catch {}
-    };
-    el.addEventListener("focus", handleFocus);
-    return () => el.removeEventListener("focus", handleFocus);
-  }, []);
-
-  // helper: add searchResult to tokens list (if not exist)
-  const addSearchResultToList = () => {
-    if (!searchResult) return;
-    const exists = tokens.find((t) => t.address.toLowerCase() === searchResult.address.toLowerCase());
-    if (!exists) {
-      setTokens((prev) => [searchResult, ...prev]);
-    }
-    setFilteredTokens((prev) => {
-      const same = prev.find((t) => t.address.toLowerCase() === searchResult.address.toLowerCase());
-      if (same) return prev;
-      return [searchResult, ...prev];
-    });
-    setSearchResult(null);
-    setSearchInput("");
-  };
-
-  // UI helpers
-  const getRiskBadge = (risk: "Low" | "Medium" | "High") => {
-    if (risk === "High")
-      return <span className="ml-2 text-[10px] text-red-400 font-semibold">⚠️ High</span>;
-    if (risk === "Medium")
-      return <span className="ml-2 text-[10px] text-yellow-300 font-semibold">⚠️ Medium</span>;
-    return <span className="ml-2 text-[10px] text-green-300 font-semibold">Safe</span>;
-  };
-
-  // basic UI rendering
+  // ======================= UI ============================
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
-      {/* Title */}
-      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
+      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">
+        PUBS BURN
+      </h1>
 
-      {/* Address display */}
       <p className="text-sm text-gray-400 mb-2 text-center">
-        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
+        {address
+          ? `${address.slice(0, 6)}…${address.slice(-4)}`
+          : "Connecting wallet..."}
       </p>
 
-      {/* SEARCH PANEL (positioned under address) */}
+      {/* SEARCH INPUT */}
       <div className="w-full max-w-sm mb-3">
         <div className="flex gap-2">
           <input
             ref={inputRef}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search token (name or contract address)"
-            className="flex-1 px-4 py-3 rounded-xl bg-[#0F0F0F] border border-[#00FF3C30] text-white placeholder-gray-500 focus:outline-none"
+            placeholder="Search token (name or contract)"
+            className="flex-1 px-4 py-3 rounded-xl bg-[#0F0F0F] border border-[#00FF3C30] text-white placeholder-gray-500"
           />
           <button
             onClick={handleSearch}
             disabled={searchLoading}
             className="px-4 py-3 rounded-xl bg-[#00FF3C] text-black font-semibold"
           >
-            {searchLoading ? "Searching..." : "Search"}
+            {searchLoading ? "..." : "Search"}
           </button>
         </div>
 
-        {searchError && <p className="text-red-500 text-xs mt-2">{searchError}</p>}
-
-        {/* Full Search Panel result (B) */}
-        {searchResult && (
-          <div className="mt-3 p-3 rounded-xl bg-[#111] border border-[#00FF3C20]">
-            <div className="flex items-center gap-3">
-              <img src={searchResult.logoUrl} className="w-10 h-10 rounded-full" />
-              <div>
-                <div className="flex items-center">
-                  <div className="font-semibold">{searchResult.name}</div>
-                  {searchResult.isScam && <span className="ml-2 text-[10px] text-red-400">🚨</span>}
-                  {getRiskBadge(searchResult.risk)}
-                </div>
-                <div className="text-xs text-gray-400">{searchResult.symbol} • {searchResult.address}</div>
-              </div>
-            </div>
-
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <div className="text-xs text-gray-400">Balance</div>
-              <div className="col-span-2 text-sm">{searchResult.balance}</div>
-
-              <div className="text-xs text-gray-400">Price</div>
-              <div className="col-span-2 text-sm">{searchResult.price ? `$${searchResult.price}` : "—"}</div>
-
-              <div className="text-xs text-gray-400">Risk</div>
-              <div className="col-span-2 text-sm">{searchResult.risk}</div>
-            </div>
-
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={addSearchResultToList}
-                className="flex-1 py-2 rounded-xl bg-[#00FF3C] text-black font-semibold"
-              >
-                Add to list
-              </button>
-
-              <button
-                onClick={() => {
-                  // quick copy address
-                  navigator.clipboard.writeText(searchResult.address);
-                }}
-                className="py-2 px-3 rounded-xl bg-[#2F2F2F] text-[#EAEAEA] font-semibold"
-              >
-                Copy
-              </button>
-            </div>
-          </div>
+        {searchError && (
+          <p className="text-red-500 text-xs mt-2">{searchError}</p>
         )}
       </div>
 
-      {/* MAIN CARD (original UI) */}
+      {/* TOKEN LIST */}
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
-        <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111] sticky top-0 z-10">
-          <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN 🚨</div>
+        <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111]">
+          <div className="text-xs text-[#FF4A4A]">
+            ALWAYS VERIFY BEFORE BURN 🚨
+          </div>
 
           <button
             onClick={() =>
@@ -674,106 +627,136 @@ export default function MiniAppPage() {
             }
             className="text-xs text-[#00FF3C]"
           >
-            {selected.length === filteredTokens.length ? "Unselect All" : "Select All"}
+            {selected.length === filteredTokens.length
+              ? "Unselect All"
+              : "Select All"}
           </button>
         </div>
 
-        <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222] no-scrollbar">
+        <div className="flex-1 max-h-[330px] overflow-y-auto divide-y divide-[#222]">
           {filteredTokens.map((t) => {
             const active = selected.includes(t.address);
             return (
               <button
                 key={t.address}
                 onClick={() =>
-                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
+                  setSelected(
+                    active
+                      ? selected.filter((x) => x !== t.address)
+                      : [...selected, t.address]
+                  )
                 }
-                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${active ? "bg-[#132A18]" : ""}`}
+                className={`flex items-center w-full px-4 py-3 ${
+                  active ? "bg-[#132A18]" : ""
+                }`}
               >
-                <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
+                <img
+                  src={t.logoUrl}
+                  className="w-7 h-7 rounded-full mr-3"
+                />
 
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
-                    {/* risk badge: small red if high */}
-                    {(t.risk === "High" || t.isScam) && <span className="text-[10px] text-red-400 ml-1">🚨</span>}
+                    {(t.risk === "High" || t.isScam) && (
+                      <span className="text-[10px] text-red-400 ml-1">
+                        🚨
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-400 truncate">
-                    {t.symbol} • {Number(t.balance || 0).toFixed(4)}
+                    {t.symbol} •{" "}
+                    {Number(t.balance || 0).toFixed(4)}
                   </div>
                 </div>
 
-                <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
+                <div
+                  className={`text-sm ${
+                    t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"
+                  }`}
+                >
                   {t.price ? `$${t.price}` : "0.00"}
                 </div>
 
                 <div className="ml-3 w-5 h-5 rounded border border-[#00FF3C] flex items-center justify-center">
-                  {active && <div className="w-3 h-3 rounded bg-[#00FF3C]" />}
+                  {active && (
+                    <div className="w-3 h-3 rounded bg-[#00FF3C]" />
+                  )}
                 </div>
               </button>
             );
           })}
         </div>
 
+        {/* ACTIONS */}
         <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
           <button
             onClick={burn}
             className={`w-full py-3 rounded-xl font-bold ${
               selected.every((s) => approvedTokens.includes(s))
-                ? "bg-[#00FF3C] hover:bg-[#32FF67] text-black"
-                : "bg-[#FFB800] hover:bg-[#FFCC33] text-black"
+                ? "bg-[#00FF3C] text-black"
+                : "bg-[#FFB800] text-black"
             }`}
           >
             {selected.length === 0
               ? "Select token first"
-              : selected.every((s) => approvedTokens.includes(s))
+              : selected.every((s) =>
+                  approvedTokens.includes(s)
+                )
               ? `Burn Now (${selected.length})`
               : `Approve Selected (${selected.length})`}
           </button>
 
           <button
             onClick={loadTokens}
-            className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]"
+            className="w-full py-3 bg-[#2F2F2F] rounded-xl font-semibold text-[#EAEAEA]"
           >
             Scan / Refresh Tokens
           </button>
         </div>
       </div>
 
-      {/* SHARE BUTTON */}
+      {/* SHARE */}
       {lastBurnTx && (
         <button
           onClick={() => shareToWarpcast(lastBurnTx)}
-          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-bold text-black shadow-lg"
+          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] rounded-xl font-bold text-black"
         >
           📣 Share on Warpcast
         </button>
       )}
 
-      <p className="text-center text-sm text-gray-400 mt-4">{status}</p>
+      <p className="text-center text-sm text-gray-400 mt-4">
+        {status}
+      </p>
 
-      {/* Overlay / Wallet UI (original) */}
+      {/* WALLET OVERLAY */}
       {overlayLoading && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[999999]">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
           <div className="flex flex-col items-center">
-            <div className="h-12 w-12 border-4 border-gray-300 border-t-[#00FF3C] rounded-full animate-spin"></div>
-            <p className="mt-4 text-white text-sm">{overlayMessage}</p>
+            <div className="h-12 w-12 border-4 border-gray-300 border-t-[#00FF3C] rounded-full animate-spin" />
+            <p className="mt-4 text-white text-sm">
+              {overlayMessage}
+            </p>
           </div>
         </div>
       )}
 
       {overlaySuccess && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999999]">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[999999]">
           <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-2xl text-lg font-semibold shadow-xl">
             {overlaySuccess}
           </div>
         </div>
       )}
 
-      {/* Queue progress modal (Auto-Burn Queue) */}
+      {/* QUEUE PROGRESS */}
       {queueRunning && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000000]">
           <div className="w-[90%] max-w-md p-6 bg-[#0B0B0B] rounded-xl border border-[#00FF3C30]">
-            <div className="text-lg font-bold">Burning tokens — progress</div>
+            <div className="text-lg font-bold">
+              Burning tokens — progress
+            </div>
             <div className="text-sm text-gray-400 mt-2">
               {queueProgress.current} / {queueProgress.total}
             </div>
@@ -784,50 +767,49 @@ export default function MiniAppPage() {
                   width:
                     queueProgress.total === 0
                       ? "0%"
-                      : `${Math.round((queueProgress.current / queueProgress.total) * 100)}%`,
+                      : `${Math.round(
+                          (queueProgress.current /
+                            queueProgress.total) *
+                            100
+                        )}%`,
                 }}
               />
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => {
-                  // we can't cancel in-flight txs reliably; just hide modal
-                  setQueueRunning(false);
-                }}
-                className="px-4 py-2 rounded-xl bg-[#2F2F2F]"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Post-burn analytics popup */}
+      {/* ANALYTICS */}
       {analytics && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000000]">
           <div className="w-[90%] max-w-sm p-6 bg-[#0B0B0B] rounded-xl border border-[#00FF3C30]">
-            <div className="text-xl font-bold">Burn Summary</div>
+            <div className="text-xl font-bold">
+              Burn Summary
+            </div>
             <div className="mt-3 text-sm text-gray-300">
-              Tokens burned: <span className="font-semibold">{analytics.count}</span>
+              Tokens burned:{" "}
+              <span className="font-semibold">
+                {analytics.count}
+              </span>
             </div>
             <div className="mt-2 text-sm text-gray-300">
-              Estimated value removed: <span className="font-semibold">${analytics.totalUsd}</span>
+              Estimated value removed:{" "}
+              <span className="font-semibold">
+                ${analytics.totalUsd}
+              </span>
             </div>
 
             <div className="mt-4 flex gap-2">
               <button
-                onClick={() => {
-                  shareToWarpcast(lastBurnTx || undefined);
-                }}
+                onClick={() =>
+                  shareToWarpcast(lastBurnTx || undefined)
+                }
                 className="flex-1 py-2 rounded-xl bg-[#00FF3C] text-black font-bold"
               >
                 Share Result
               </button>
               <button
-                onClick={() => {
-                  setAnalytics(null);
-                }}
+                onClick={() => setAnalytics(null)}
                 className="py-2 px-3 rounded-xl bg-[#2F2F2F] text-[#EAEAEA]"
               >
                 Close
