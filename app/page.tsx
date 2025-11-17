@@ -136,11 +136,11 @@ export default function MiniAppPage() {
     }
   };
 
-  // ⚡ ADDED: fungsi auto-share Warpcast
-  const shareWarpcastAuto = (txHash: string) => {
+  // ⚡ FINAL DEEP LINK SHARE (OPEN MINIAPP)
+  const shareWarpcastAuto = () => {
     sdk.actions.openUrl(
       `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nTX: https://basescan.org/tx/${txHash}\n#SafeOnchain`
+        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\nwarpcast://miniapp?url=https://pubs-burn.vercel.app\n#SafeOnchain`
       )}`
     );
   };
@@ -242,9 +242,9 @@ export default function MiniAppPage() {
 
           setStatus(`✅ Burned ${row.symbol} successfully!`);
 
-          // ⚡ ADDED: simpan tx + auto-share Farcaster
+          // ⚡ FINAL AUTO SHARE (NO TX HASH, OPEN MINIAPP)
           setLastBurnTx(tx.hash);
-          shareWarpcastAuto(tx.hash);
+          shareWarpcastAuto();
 
         } catch (err: any) {
           setOverlayLoading(false);
@@ -276,7 +276,7 @@ export default function MiniAppPage() {
     if (!lastBurnTx) return;
     sdk.actions.openUrl(
       `https://warpcast.com/~/compose?text=${encodeURIComponent(
-        "I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥 #SafeOnchain"
+        `I just cleaned my wallet by burning scam tokens using PUBS BURN ♻️🔥\nOpen Miniapp:\nwarpcast://miniapp?url=https://pubs-burn.vercel.app\n#SafeOnchain`
       )}`
     );
   };
@@ -299,7 +299,9 @@ export default function MiniAppPage() {
 
           <button
             onClick={() =>
-              selected.length === tokens.length ? setSelected([]) : setSelected(tokens.map((t) => t.address))
+              selected.length === tokens.length
+                ? setSelected([])
+                : setSelected(tokens.map((t) => t.address))
             }
             className="text-xs text-[#00FF3C]"
           >
@@ -314,9 +316,15 @@ export default function MiniAppPage() {
               <button
                 key={t.address}
                 onClick={() =>
-                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
+                  setSelected(
+                    active
+                      ? selected.filter((x) => x !== t.address)
+                      : [...selected, t.address]
+                  )
                 }
-                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${active ? "bg-[#132A18]" : ""}`}
+                className={`flex items-center w-full px-4 py-3 hover:bg-[#1A1F1A] transition ${
+                  active ? "bg-[#132A18]" : ""
+                }`}
               >
                 <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
 
@@ -330,7 +338,11 @@ export default function MiniAppPage() {
                   </div>
                 </div>
 
-                <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>
+                <div
+                  className={`text-sm ${
+                    t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"
+                  }`}
+                >
                   {t.price ? `$${t.price}` : "0.00"}
                 </div>
 
@@ -358,14 +370,20 @@ export default function MiniAppPage() {
               : `Approve Selected (${selected.length})`}
           </button>
 
-          <button onClick={loadTokens} className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]">
+          <button
+            onClick={loadTokens}
+            className="w-full py-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] rounded-xl font-semibold text-[#EAEAEA]"
+          >
             Scan / Refresh Tokens
           </button>
         </div>
       </div>
 
       {lastBurnTx && (
-        <button onClick={shareWarpcast} className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black">
+        <button
+          onClick={shareWarpcast}
+          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] hover:bg-[#32FF67] rounded-xl font-semibold text-black"
+        >
           📣 Share on Feed
         </button>
       )}
