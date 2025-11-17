@@ -8,12 +8,11 @@ import { useAccount } from "wagmi";
 import { ethers } from "ethers";
 
 /**
- * PUBS BURN — FINAL VERSION (with fixes)
- * - Auto-add search result to middle list
- * - Auto-select after search
- * - Refresh keeps list & unselects
- * - FIXED: shareToWarpcast not found
- * - FIXED: token / i implicitly any
+ * PUBS BURN — FINAL VERSION (TypeScript fixes & safer updates)
+ *
+ * - Adds Token interface and types to remove implicit any errors
+ * - Updates tokens/filteredTokens via address matching (safer than index-based updates)
+ * - Keeps logic intact: scan / search (auto-add + auto-select) / approve / burn / queue / share
  */
 
 const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
@@ -21,21 +20,35 @@ const ABI = [
   "function quoteErc20Fee(address token, uint256 amount) view returns (uint256, uint8)",
   "function burnToken(address token, uint256 amount, string scanSummary) payable",
 ];
-const ERC20_ABI = [
-  "function approve(address spender, uint256 amount) external returns (bool)",
-];
+const ERC20_ABI = ["function approve(address spender, uint256 amount) external returns (bool)"];
 
 // caches
-const metaCache = new Map<string, any>();
-const dexCache = new Map<string, any>();
+const metaCache = new Map<string, Token>();
+const dexCache = new Map<string, { price: string | null; logo?: string }>();
+
+type RiskLevel = "Low" | "Medium" | "High";
+
+interface Token {
+  address: string;
+  rawBalance: bigint;
+  name: string;
+  symbol: string;
+  decimals: number;
+  balance: string; // formatted string
+  logoUrl: string;
+  price: string | null;
+  isScam: boolean;
+  risk?: RiskLevel;
+  fetchedAt?: number;
+}
 
 export default function MiniAppPage() {
   const { address, isConnected } = useAccount();
 
   // STATES
-  const [status, setStatus] = useState("");
-  const [tokens, setTokens] = useState<any[]>([]);
-  const [filteredTokens, setFilteredTokens] = useState<any[]>([]);
+  const [status, setStatus] = useState<string>("");
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
   const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
@@ -56,6 +69,26 @@ export default function MiniAppPage() {
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // helper: safely replace or add token in tokens & filteredTokens by address
+  const upsertTokenToLists = (token: Token) => {
+    setTokens((prev) => {
+      const found = prev.find((p) => p.address.toLowerCase() === token.address.toLowerCase());
+      if (found) {
+        return prev.map((p) => (p.address.toLowerCase() === token.address.toLowerCase() ? { ...p, ...token } : p));
+      }
+      return [token, ...prev];
+    });
+
+    setFilteredTokens((prev) => {
+      const found = prev.find((p) => p.address.toLowerCase() === token.address.toLowerCase());
+      if (found) {
+        return prev.map((p) => (p.address.toLowerCase() === token.address.toLowerCase() ? { ...p, ...token } : p));
+      }
+      // if currently showing a filtered view, keep it and place this result at top
+      return [token, ...prev];
+    });
+  };
+
   // ✅ FIX: ensure function exists & global
   const shareToWarpcast = (txHash?: string) => {
     let msg =
@@ -68,9 +101,13 @@ export default function MiniAppPage() {
 
     msg += "\nTry it now:\nhttps://farcaster.xyz/miniapps/mz8cOJsCFzrX";
 
-    sdk.actions.openUrl(
-      "https://warpcast.com/~/compose?text=" + encodeURIComponent(msg)
-    );
+    try {
+      sdk.actions.openUrl("https://warpcast.com/~/compose?text=" + encodeURIComponent(msg));
+    } catch (e) {
+      // fallback: in dev or environment without sdk.actions
+      // eslint-disable-next-line no-console
+      console.warn("shareToWarpcast failed", e);
+    }
   };
 
   // miniapp ready
@@ -85,9 +122,10 @@ export default function MiniAppPage() {
     if (!isConnected || !address) return;
     const t = setTimeout(() => loadTokens(), 300);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, address]);
 
-  // LOAD TOKENS (kept original logic)
+  // LOAD TOKENS (kept original logic but safer updates)
   const loadTokens = async () => {
     if (!address) return;
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
@@ -109,22 +147,26 @@ export default function MiniAppPage() {
       const data = await res.json();
       const list = data?.result?.tokenBalances ?? [];
 
-      // fresh scan, but DO NOT remove search results
-      const scanned: any[] = list
+      // scanned tokens (only those with balance > 0)
+      const scanned: Token[] = list
         .filter((t: any) => BigInt(t.tokenBalance) > 0n)
-        .map((t: any) => ({
-          address: t.contractAddress,
-          rawBalance: BigInt(t.tokenBalance),
-          name: "Loading...",
-          symbol: "",
-          decimals: 18,
-          balance: "0",
-          logoUrl: "/token.png",
-          price: null,
-          isScam: false,
-        }));
+        .map((t: any) => {
+          const raw = BigInt(t.tokenBalance);
+          const decimals = 18;
+          return {
+            address: t.contractAddress,
+            rawBalance: raw,
+            name: "Loading...",
+            symbol: "",
+            decimals,
+            balance: "0", // will be updated after metadata fetch
+            logoUrl: "/token.png",
+            price: null,
+            isScam: false,
+          } as Token;
+        });
 
-      // keep any manually-added tokens
+      // keep previously manually-added tokens (tokens previously added via search)
       const manualAdded = tokens.filter(
         (t) => !scanned.find((x) => x.address.toLowerCase() === t.address.toLowerCase())
       );
@@ -136,8 +178,8 @@ export default function MiniAppPage() {
       setSelected([]); // unselect (requested)
       setStatus("🟢 Select token");
 
-      // fetch metadata / price
-      merged.forEach(async (token: any, i: number) => {
+      // fetch metadata / price for each token and upsert safely
+      for (const token of merged) {
         try {
           const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
             method: "POST",
@@ -151,60 +193,53 @@ export default function MiniAppPage() {
           });
           const meta = await metaRes.json();
           const r = meta?.result;
-
           if (r) {
-            token.decimals = r.decimals ?? 18;
-            token.name = r.name || r.symbol || "Token";
-            token.symbol = r.symbol || "";
-            token.logoUrl = r.logo || "/token.png";
-            token.balance = ethers.formatUnits(token.rawBalance, token.decimals);
+            token.decimals = r.decimals ?? token.decimals ?? 18;
+            token.name = r.name || r.symbol || token.name || "Token";
+            token.symbol = r.symbol || token.symbol || "";
+            token.logoUrl = r.logo || token.logoUrl || "/token.png";
+            // if rawBalance present, compute formatted balance
+            try {
+              token.balance = ethers.formatUnits(token.rawBalance ?? 0n, token.decimals);
+            } catch {
+              token.balance = "0";
+            }
           }
 
           try {
-            const priceRes = await fetch(
-              `https://api.dexscreener.com/latest/dex/tokens/${token.address}`
-            );
+            const priceRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.address}`);
             const priceJ = await priceRes.json();
             token.price = priceJ?.pairs?.[0]?.priceUsd ?? null;
             const img = priceJ?.pairs?.[0]?.info?.imageUrl;
             if (img) token.logoUrl = img;
             token.isScam = !token.price || Number(token.price) === 0;
-          } catch {}
+          } catch {
+            token.price = token.price ?? null;
+          }
 
-          setTokens((prev) => {
-            const c = [...prev];
-            c[i] = { ...token };
-            return c;
-          });
-
-          setFilteredTokens((prev) => {
-            const c = [...prev];
-            c[i] = { ...token };
-            return c;
-          });
-        } catch {}
-      });
+          upsertTokenToLists({ ...token, fetchedAt: Date.now() });
+        } catch (e) {
+          // ignore per-token errors
+        }
+      }
     } catch (err) {
       console.error("SCAN ERROR:", err);
       setStatus("❌ Failed to scan tokens");
     }
   };
+
   // --------------------------- BURN ---------------------------
   const burn = async () => {
     if (!selected.length) return setStatus("Select token(s) to burn.");
     setStatus("🔥 Starting process...");
 
-    const provider = new ethers.BrowserProvider(
-      (sdk as any).wallet.ethProvider as any
-    );
+    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(CONTRACT, ABI, signer);
     const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
     try {
-      const needApproval = selected.filter(
-        (addr) => !approvedTokens.includes(addr)
-      );
+      const needApproval = selected.filter((addr) => !approvedTokens.includes(addr));
 
       // APPROVAL flow
       if (needApproval.length > 0) {
@@ -217,21 +252,11 @@ export default function MiniAppPage() {
           try {
             setStatus(`🧾 Approving ${row.symbol}...`);
             setShowWalletOverlay(true);
-            setOverlayMessage(
-              `Waiting wallet popup to approve ${row.symbol}...`
-            );
+            setOverlayMessage(`Waiting wallet popup to approve ${row.symbol}...`);
             setOverlayLoading(true);
 
-            const tokenContract = new ethers.Contract(
-              row.address,
-              ERC20_ABI,
-              signer
-            );
-            const tx = await tokenContract.approve(
-              CONTRACT,
-              row.rawBalance,
-              { gasLimit: 200_000n }
-            );
+            const tokenContract = new ethers.Contract(row.address, ERC20_ABI, signer);
+            const tx = await tokenContract.approve(CONTRACT, row.rawBalance, { gasLimit: 200_000n });
 
             setOverlayMessage(`Confirming ${row.symbol} approval...`);
             await rpc.waitForTransaction(tx.hash);
@@ -272,10 +297,7 @@ export default function MiniAppPage() {
         // estimate fee
         let feeWei: bigint = 0n;
         try {
-          const [feeRequired] = await contract.quoteErc20Fee(
-            row.address,
-            row.rawBalance
-          );
+          const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
           feeWei = feeRequired;
         } catch {
           feeWei = ethers.parseUnits("0.0001", "ether");
@@ -284,17 +306,11 @@ export default function MiniAppPage() {
         try {
           setStatus(`🔥 Burning ${row.symbol}...`);
           setShowWalletOverlay(true);
-          setOverlayMessage(
-            `Waiting wallet popup to burn ${row.symbol}...`
-          );
+          setOverlayMessage(`Waiting wallet popup to burn ${row.symbol}...`);
           setOverlayLoading(true);
 
           const iface = new ethers.Interface(ABI);
-          const data = iface.encodeFunctionData("burnToken", [
-            row.address,
-            row.rawBalance,
-            JSON.stringify({ safe: true }),
-          ]);
+          const data = iface.encodeFunctionData("burnToken", [row.address, row.rawBalance, JSON.stringify({ safe: true })]);
 
           const tx = await signer.sendTransaction({
             to: CONTRACT,
@@ -303,9 +319,7 @@ export default function MiniAppPage() {
             gasLimit: 350_000n,
           });
 
-          setOverlayMessage(
-            `Waiting burn confirmation for ${row.symbol}...`
-          );
+          setOverlayMessage(`Waiting burn confirmation for ${row.symbol}...`);
           await rpc.waitForTransaction(tx.hash);
 
           setOverlayLoading(false);
@@ -319,8 +333,7 @@ export default function MiniAppPage() {
         } catch (err: any) {
           setOverlayLoading(false);
           setShowWalletOverlay(false);
-          if (err?.code === 4001)
-            setStatus("User canceled burn");
+          if (err?.code === 4001) setStatus("User canceled burn");
           else setStatus("Burn failed");
           continue;
         }
@@ -345,9 +358,7 @@ export default function MiniAppPage() {
     setQueueRunning(true);
     setQueueProgress({ current: 0, total: queue.length });
 
-    const provider = new ethers.BrowserProvider(
-      (sdk as any).wallet.ethProvider as any
-    );
+    const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider as any);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(CONTRACT, ABI, signer);
     const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
@@ -370,21 +381,14 @@ export default function MiniAppPage() {
         // fee
         let feeWei: bigint = 0n;
         try {
-          const [feeRequired] = await contract.quoteErc20Fee(
-            row.address,
-            row.rawBalance
-          );
+          const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
           feeWei = feeRequired;
         } catch {
           feeWei = ethers.parseUnits("0.0001", "ether");
         }
 
         const iface = new ethers.Interface(ABI);
-        const data = iface.encodeFunctionData("burnToken", [
-          row.address,
-          row.rawBalance,
-          JSON.stringify({ safe: true }),
-        ]);
+        const data = iface.encodeFunctionData("burnToken", [row.address, row.rawBalance, JSON.stringify({ safe: true })]);
 
         const tx = await signer.sendTransaction({
           to: CONTRACT,
@@ -398,8 +402,7 @@ export default function MiniAppPage() {
         burned.push({ token: row, txHash: tx.hash });
 
         if (row.price) {
-          const usd =
-            Number(row.price) * Number(row.balance || 0);
+          const usd = Number(row.price) * Number(row.balance || 0);
           if (!isNaN(usd)) totalUsd += usd;
         }
 
@@ -435,9 +438,7 @@ export default function MiniAppPage() {
 
     // 1) local search (name / symbol)
     const local = tokens.filter(
-      (t) =>
-        (t.name || "").toLowerCase().includes(q) ||
-        (t.symbol || "").toLowerCase().includes(q)
+      (t) => (t.name || "").toLowerCase().includes(q) || (t.symbol || "").toLowerCase().includes(q)
     );
 
     if (local.length > 0) {
@@ -445,9 +446,7 @@ export default function MiniAppPage() {
 
       // auto-select all matched
       const addrs = local.map((x) => x.address);
-      setSelected((prev) =>
-        Array.from(new Set([...prev, ...addrs]))
-      );
+      setSelected((prev) => Array.from(new Set([...prev, ...addrs])));
       return;
     }
 
@@ -461,28 +460,12 @@ export default function MiniAppPage() {
 
     // 3) cached CA metadata
     if (metaCache.has(q)) {
-      const cached = metaCache.get(q);
+      const cached = metaCache.get(q)!;
 
-      // ensure added
-      setTokens((prev) => {
-        const exists = prev.find(
-          (p) => p.address.toLowerCase() === q
-        );
-        if (exists) return prev;
-        return [cached, ...prev];
-      });
-
-      setFilteredTokens((prev) => {
-        const exists = prev.find(
-          (p) => p.address.toLowerCase() === q
-        );
-        return exists ? prev : [cached, ...prev];
-      });
+      upsertTokenToLists(cached);
 
       // auto select
-      setSelected((prev) =>
-        prev.includes(q) ? prev : [...prev, q]
-      );
+      setSelected((prev) => (prev.includes(q) ? prev : [...prev, q]));
       return;
     }
 
@@ -497,22 +480,18 @@ export default function MiniAppPage() {
       }
 
       // fetch meta
-      const metaRes = await fetch(
-        `https://base-mainnet.g.alchemy.com/v2/${key}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            id: 99,
-            jsonrpc: "2.0",
-            method: "alchemy_getTokenMetadata",
-            params: [q],
-          }),
-        }
-      );
+      const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: 99,
+          jsonrpc: "2.0",
+          method: "alchemy_getTokenMetadata",
+          params: [q],
+        }),
+      });
       const metaJ = await metaRes.json();
       const r = metaJ?.result;
-
       if (!r) {
         setSearchError("Token metadata not found");
         setSearchLoading(false);
@@ -524,13 +503,11 @@ export default function MiniAppPage() {
       let logo = r.logo || "/token.png";
       try {
         if (dexCache.has(q)) {
-          const dex = dexCache.get(q);
+          const dex = dexCache.get(q)!;
           price = dex.price;
           logo = dex.logo || logo;
         } else {
-          const dexRes = await fetch(
-            `https://api.dexscreener.com/latest/dex/tokens/${q}`
-          );
+          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${q}`);
           const dexJ = await dexRes.json();
           price = dexJ?.pairs?.[0]?.priceUsd ?? null;
           const img = dexJ?.pairs?.[0]?.info?.imageUrl;
@@ -543,41 +520,29 @@ export default function MiniAppPage() {
       let rawBalance = 0n;
       let balance = "0";
       try {
-        const balRes = await fetch(
-          `https://base-mainnet.g.alchemy.com/v2/${key}`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: 2,
-              jsonrpc: "2.0",
-              method:
-                "alchemy_getTokenBalances",
-              params: [address],
-            }),
-          }
-        );
+        const balRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: 2,
+            jsonrpc: "2.0",
+            method: "alchemy_getTokenBalances",
+            params: [address],
+          }),
+        });
 
         const balJ = await balRes.json();
         const all = balJ?.result?.tokenBalances ?? [];
-        const found = all.find(
-          (t: any) =>
-            (t.contractAddress ?? "")
-              .toLowerCase() === q
-        );
+        const found = all.find((t: any) => (t.contractAddress ?? "").toLowerCase() === q);
         if (found) {
           rawBalance = BigInt(found.tokenBalance);
-          balance = ethers.formatUnits(
-            rawBalance,
-            r.decimals ?? 18
-          );
+          balance = ethers.formatUnits(rawBalance, r.decimals ?? 18);
         }
       } catch {}
 
-      const risk =
-        !price || Number(price) === 0 ? "High" : "Low";
+      const risk: RiskLevel = !price || Number(price) === 0 ? "High" : "Low";
 
-      const result = {
+      const result: Token = {
         address: q,
         rawBalance,
         name: r.name || r.symbol || "Token",
@@ -592,26 +557,10 @@ export default function MiniAppPage() {
       };
 
       metaCache.set(q, result);
-
-      // add into tokens & filteredTokens
-      setTokens((prev) => {
-        const exists = prev.find(
-          (p) => p.address.toLowerCase() === q
-        );
-        return exists ? prev : [result, ...prev];
-      });
-
-      setFilteredTokens((prev) => {
-        const exists = prev.find(
-          (p) => p.address.toLowerCase() === q
-        );
-        return exists ? prev : [result, ...prev];
-      });
+      upsertTokenToLists(result);
 
       // auto-select
-      setSelected((prev) =>
-        prev.includes(q) ? prev : [...prev, q]
-      );
+      setSelected((prev) => (prev.includes(q) ? prev : [...prev, q]));
     } catch (err) {
       console.error("SEARCH ERROR", err);
       setSearchError("Search failed");
@@ -619,19 +568,16 @@ export default function MiniAppPage() {
       setSearchLoading(false);
     }
   };
+
   // --------------------------- UI ---------------------------
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EAEAEA] px-4 py-6 flex flex-col items-center overflow-hidden">
       {/* TITLE */}
-      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">
-        PUBS BURN
-      </h1>
+      <h1 className="text-3xl font-bold mb-2 text-center text-[#00FF3C]">PUBS BURN</h1>
 
       {/* ADDRESS */}
       <p className="text-sm text-gray-400 mb-3 text-center">
-        {address
-          ? `${address.slice(0, 6)}…${address.slice(-4)}`
-          : "Connecting wallet..."}
+        {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Connecting wallet..."}
       </p>
 
       {/* SEARCH BAR */}
@@ -644,39 +590,26 @@ export default function MiniAppPage() {
             placeholder="Search token (name or contract)"
             className="flex-1 px-4 py-3 rounded-xl bg-[#0F0F0F] border border-[#00FF3C30] text-white placeholder-gray-500"
           />
-          <button
-            onClick={handleSearch}
-            disabled={searchLoading}
-            className="px-4 py-3 rounded-xl bg-[#00FF3C] text-black font-semibold"
-          >
+          <button onClick={handleSearch} disabled={searchLoading} className="px-4 py-3 rounded-xl bg-[#00FF3C] text-black font-semibold">
             {searchLoading ? "..." : "Search"}
           </button>
         </div>
-        {searchError && (
-          <p className="text-red-500 text-xs mt-2">{searchError}</p>
-        )}
+        {searchError && <p className="text-red-500 text-xs mt-2">{searchError}</p>}
       </div>
 
       {/* TOKEN LIST BOX */}
       <div className="w-full max-w-sm flex flex-col bg-[#151515] rounded-xl border border-[#00FF3C30] overflow-hidden">
-
         {/* HEADER */}
         <div className="flex justify-between p-2 border-b border-[#00FF3C30] bg-[#111]">
-          <div className="text-xs text-[#FF4A4A]">
-            ALWAYS VERIFY BEFORE BURN 🚨
-          </div>
+          <div className="text-xs text-[#FF4A4A]">ALWAYS VERIFY BEFORE BURN 🚨</div>
 
           <button
             onClick={() =>
-              selected.length === filteredTokens.length
-                ? setSelected([])
-                : setSelected(filteredTokens.map((t) => t.address))
+              selected.length === filteredTokens.length ? setSelected([]) : setSelected(filteredTokens.map((t) => t.address))
             }
             className="text-xs text-[#00FF3C]"
           >
-            {selected.length === filteredTokens.length
-              ? "Unselect All"
-              : "Select All"}
+            {selected.length === filteredTokens.length ? "Unselect All" : "Select All"}
           </button>
         </div>
 
@@ -688,29 +621,16 @@ export default function MiniAppPage() {
               <button
                 key={t.address}
                 onClick={() =>
-                  setSelected(
-                    active
-                      ? selected.filter((x) => x !== t.address)
-                      : [...selected, t.address]
-                  )
+                  setSelected(active ? selected.filter((x) => x !== t.address) : [...selected, t.address])
                 }
-                className={`flex items-center w-full px-4 py-3 ${
-                  active ? "bg-[#132A18]" : ""
-                }`}
+                className={`flex items-center w-full px-4 py-3 ${active ? "bg-[#132A18]" : ""}`}
               >
-                <img
-                  src={t.logoUrl}
-                  className="w-7 h-7 rounded-full mr-3"
-                />
+                <img src={t.logoUrl} className="w-7 h-7 rounded-full mr-3" />
 
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate flex items-center gap-1">
                     {t.name}
-                    {(t.risk === "High" || t.isScam) && (
-                      <span className="text-[10px] text-red-400 ml-1">
-                        🚨
-                      </span>
-                    )}
+                    {(t.risk === "High" || t.isScam) && <span className="text-[10px] text-red-400 ml-1">🚨</span>}
                   </div>
 
                   <div className="text-xs text-gray-400 truncate">
@@ -718,13 +638,7 @@ export default function MiniAppPage() {
                   </div>
                 </div>
 
-                <div
-                  className={`text-sm ${
-                    t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"
-                  }`}
-                >
-                  {t.price ? `$${t.price}` : "0.00"}
-                </div>
+                <div className={`text-sm ${t.isScam ? "text-[#FF4A4A]" : "text-[#00FF3C]"}`}>{t.price ? `$${t.price}` : "0.00"}</div>
 
                 <div className="ml-3 w-5 h-5 rounded border border-[#00FF3C] flex items-center justify-center">
                   {active && <div className="w-3 h-3 rounded bg-[#00FF3C]" />}
@@ -738,23 +652,12 @@ export default function MiniAppPage() {
         <div className="p-3 border-t border-[#00FF3C30] bg-[#111] flex flex-col gap-3">
           <button
             onClick={burn}
-            className={`w-full py-3 rounded-xl font-bold ${
-              selected.every((s) => approvedTokens.includes(s))
-                ? "bg-[#00FF3C] text-black"
-                : "bg-[#FFB800] text-black"
-            }`}
+            className={`w-full py-3 rounded-xl font-bold ${selected.every((s) => approvedTokens.includes(s)) ? "bg-[#00FF3C] text-black" : "bg-[#FFB800] text-black"}`}
           >
-            {selected.length === 0
-              ? "Select token first"
-              : selected.every((s) => approvedTokens.includes(s))
-              ? `Burn Now (${selected.length})`
-              : `Approve Selected (${selected.length})`}
+            {selected.length === 0 ? "Select token first" : selected.every((s) => approvedTokens.includes(s)) ? `Burn Now (${selected.length})` : `Approve Selected (${selected.length})`}
           </button>
 
-          <button
-            onClick={loadTokens}
-            className="w-full py-3 bg-[#2F2F2F] rounded-xl font-semibold text-[#EAEAEA]"
-          >
+          <button onClick={loadTokens} className="w-full py-3 bg-[#2F2F2F] rounded-xl font-semibold text-[#EAEAEA]">
             Scan / Refresh Tokens
           </button>
         </div>
@@ -762,10 +665,7 @@ export default function MiniAppPage() {
 
       {/* SHARE BUTTON */}
       {lastBurnTx && (
-        <button
-          onClick={() => shareToWarpcast(lastBurnTx)}
-          className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] rounded-xl font-bold text-black"
-        >
+        <button onClick={() => shareToWarpcast(lastBurnTx)} className="mt-4 w-full max-w-sm py-3 bg-[#00FF3C] rounded-xl font-bold text-black">
           📣 Share on Warpcast
         </button>
       )}
@@ -788,9 +688,7 @@ export default function MiniAppPage() {
       {/* SUCCESS POPUP */}
       {overlaySuccess && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[999999]">
-          <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-xl text-lg font-semibold shadow-xl">
-            {overlaySuccess}
-          </div>
+          <div className="px-6 py-4 bg-[#00FF3C] text-black rounded-xl text-lg font-semibold shadow-xl">{overlaySuccess}</div>
         </div>
       )}
 
@@ -805,19 +703,7 @@ export default function MiniAppPage() {
             </div>
 
             <div className="mt-4 w-full bg-[#111] rounded-full h-3">
-              <div
-                className="h-3 rounded-full bg-[#00FF3C]"
-                style={{
-                  width:
-                    queueProgress.total === 0
-                      ? "0%"
-                      : `${Math.round(
-                          (queueProgress.current /
-                            queueProgress.total) *
-                            100
-                        )}%`,
-                }}
-              />
+              <div className="h-3 rounded-full bg-[#00FF3C]" style={{ width: queueProgress.total === 0 ? "0%" : `${Math.round((queueProgress.current / queueProgress.total) * 100)}%` }} />
             </div>
           </div>
         </div>
@@ -830,29 +716,19 @@ export default function MiniAppPage() {
             <div className="text-xl font-bold">Burn Summary</div>
 
             <div className="mt-3 text-sm text-gray-300">
-              Tokens burned:{" "}
-              <span className="font-semibold">{analytics.count}</span>
+              Tokens burned: <span className="font-semibold">{analytics.count}</span>
             </div>
 
             <div className="mt-2 text-sm text-gray-300">
-              Estimated value removed:{" "}
-              <span className="font-semibold">${analytics.totalUsd}</span>
+              Estimated value removed: <span className="font-semibold">${analytics.totalUsd}</span>
             </div>
 
             <div className="mt-4 flex gap-2">
-              <button
-                onClick={() =>
-                  shareToWarpcast(lastBurnTx || undefined)
-                }
-                className="flex-1 py-2 rounded-xl bg-[#00FF3C] text-black font-bold"
-              >
+              <button onClick={() => shareToWarpcast(lastBurnTx || undefined)} className="flex-1 py-2 rounded-xl bg-[#00FF3C] text-black font-bold">
                 Share Result
               </button>
 
-              <button
-                onClick={() => setAnalytics(null)}
-                className="py-2 px-3 rounded-xl bg-[#2F2F2F] text-[#EAEAEA]"
-              >
+              <button onClick={() => setAnalytics(null)} className="py-2 px-3 rounded-xl bg-[#2F2F2F] text-[#EAEAEA]">
                 Close
               </button>
             </div>
