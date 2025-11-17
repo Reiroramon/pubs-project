@@ -34,6 +34,11 @@ export const metadata: Metadata = {
     ],
   },
   other: {
+    // REQUIRED untuk Universal Links agar muncul sebagai Mini App
+    "fc:frame": "vNext",
+    "fc:miniapp:domain": "pubs-burn.vercel.app",
+
+    // miniapp config kamu (sudah benar)
     "fc:miniapp": JSON.stringify(miniapp),
   },
 };
