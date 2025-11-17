@@ -5,7 +5,8 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "PUBS BURN",
-  description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
+  description:
+    "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
   openGraph: {
     title: "PUBS BURN",
     description:
@@ -21,29 +22,37 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const miniappJson = JSON.stringify({
+    version: "1",
+    imageUrl: "https://pubs-burn.vercel.app/image.png",
+    button: {
+      title: "BURN IT !",
+      action: {
+        type: "launch_frame",
+        name: "PUBS BURN",
+        url: "https://pubs-burn.vercel.app",
+        splashImageUrl: "https://pubs-burn.vercel.app/splash.png",
+        splashBackgroundColor: "#0A0A0A",
+      },
+    },
+  });
+
   return (
     <html lang="en">
       <head>
-        {/* 🔥 Tambahkan manual SUPAYA property= */}
-        <meta property="fc:frame" content="vNext" />
-        <meta property="fc:miniapp:domain" content="pubs-burn.vercel.app" />
+        {/* Wajib agar link tampil sebagai Mini App card */}
+        <meta name="fc:frame" content="vNext" />
 
-        {/* miniapp config */}
-        <meta property="fc:miniapp" content={JSON.stringify({
-          version: "1",
-          imageUrl: "https://pubs-burn.vercel.app/image.png",
-          button: {
-            title: "BURN IT !",
-            action: {
-              type: "launch_frame",
-              name: "PUBS BURN",
-              url: "https://pubs-burn.vercel.app",
-              splashImageUrl: "https://pubs-burn.vercel.app/splash.png",
-              splashBackgroundColor: "#0A0A0A",
-            },
-          },
-        })} />
+        {/* Domain Mini Apps */}
+        <meta name="fc:miniapp:domain" content="pubs-burn.vercel.app" />
+
+        {/* Config Mini App */}
+        <meta name="fc:miniapp" content={miniappJson} />
       </head>
 
       <body>
