@@ -5,24 +5,31 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "PUBS BURN",
-  description: "Easy ways to make your wallet clean — Burn scam tokens instantly!",
+  description: "Easy ways to make your wallet clean — burn scam tokens instantly!",
 
-  // ⭐ FARCASTER MINIAPP META TAG (WAJIB UNTUK EMBED)
+  // ⭐ COMBINED MINIAPP + FRAME EMBED
   other: {
-    "fc:frame": "vNext",
+    // === MINIAPP DISCOVERY (AGAR MUNCUL DI SEARCH) ===
     "fc:app": "mini",
     "fc:miniapp": "true",
     "fc:miniapp:manifest": "https://pubs-burn.vercel.app/.well-known/farcaster.json",
+
+    // === FRAME EMBED (AGAR MUNCUL SEBAGAI CARD SAAT DI-SHARE) ===
+    "fc:frame": "vNext",
+    "fc:frame:image": "https://pubs-burn.vercel.app/hero.png",
+    "fc:frame:button:1": "Open Miniapp",
+    "fc:frame:button:1:action": "launch_frame",
+    "fc:frame:button:1:target": "https://pubs-burn.vercel.app/miniapp",
   },
 
-  // ⭐ SHARE CARD (OG TAGS)
+  // ⭐ OG SHARE (CARD GAMBAR 1200x630)
   openGraph: {
     title: "PUBS BURN",
-    description: "Easy ways to make your wallet clean — Burn scam tokens instantly!",
+    description: "Easy ways to make your wallet clean — burn scam tokens instantly!",
     url: "https://pubs-burn.vercel.app",
     images: [
       {
-        url: "https://pubs-burn.vercel.app/hiro.png",
+        url: "https://pubs-burn.vercel.app/hero.png",
         width: 1200,
         height: 630,
       },
