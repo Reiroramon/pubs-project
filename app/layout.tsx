@@ -3,29 +3,27 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 
+const miniapp = {
+  version: "1",
+  imageUrl: "https://pubs-burn.vercel.app/image.png",
+  button: {
+    title: "BURN IT !",
+    action: {
+      type: "launch_frame",
+      name: "PUBS BURN",
+      url: "https://pubs-burn.vercel.app",
+      splashImageUrl: "https://pubs-burn.vercel.app/splash.png",
+      splashBackgroundColor: "#0A0A0A",
+    },
+  },
+};
+
 export const metadata: Metadata = {
   title: "PUBS BURN",
-  description: "Easy ways to make your wallet clean — burn scam tokens instantly!",
-
-  // ⭐ COMBINED MINIAPP + FRAME EMBED
-  other: {
-    // === MINIAPP DISCOVERY (AGAR MUNCUL DI SEARCH) ===
-    "fc:app": "mini",
-    "fc:miniapp": "true",
-    "fc:miniapp:manifest": "https://pubs-burn.vercel.app/.well-known/farcaster.json",
-
-    // === FRAME EMBED (AGAR MUNCUL SEBAGAI CARD SAAT DI-SHARE) ===
-    "fc:frame": "vNext",
-    "fc:frame:image": "https://pubs-burn.vercel.app/hero.png",
-    "fc:frame:button:1": "Open Miniapp",
-    "fc:frame:button:1:action": "launch_frame",
-    "fc:frame:button:1:target": "https://pubs-burn.vercel.app/miniapp",
-  },
-
-  // ⭐ OG SHARE (CARD GAMBAR 1200x630)
+  description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
   openGraph: {
     title: "PUBS BURN",
-    description: "Easy ways to make your wallet clean — burn scam tokens instantly!",
+    description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
     url: "https://pubs-burn.vercel.app",
     images: [
       {
@@ -34,6 +32,9 @@ export const metadata: Metadata = {
         height: 630,
       },
     ],
+  },
+  other: {
+    "fc:miniapp": JSON.stringify(miniapp),
   },
 };
 
