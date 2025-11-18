@@ -1,12 +1,9 @@
 {
-  "headers": [
+  "redirects": [
     {
       "source": "/.well-known/farcaster.json",
-      "headers": [
-        { "key": "Content-Type", "value": "application/json" },
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
+      "destination": "https://api.farcaster.xyz/miniapps/hosted-manifest/019a97ea-3386-18dd-941f-137377bb7efe",
+      "statusCode": 307
     }
-  ],
-  "cleanUrls": true
+  ]
 }
