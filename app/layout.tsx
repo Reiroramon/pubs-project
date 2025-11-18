@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     url: "https://pubs-burn.vercel.app",
     images: [
       {
-        url: "https://pubs-burn.vercel.app/hero.png",
+        url: "https://pubs-burn.vercel.app/oghero.png",
         width: 1200,
         height: 630,
       },
