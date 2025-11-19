@@ -31,21 +31,20 @@ export default function MiniAppPage() {
   // ⭐ NEW popup state
   const [showSharePopup, setShowSharePopup] = useState(false);
 
-  useEffect(() => {
-    console.log("miniapp: trying sdk.actions.ready()");
-    try {
-      sdk.actions.ready();
-      console.log("miniapp: ready() success");
-    } catch (e) {
-      console.warn("miniapp: ready() failed:", e);
-    }
-  }, []);
+  // Dipanggil ketika miniapp benar-benar siap (wallet sudah connect)
+useEffect(() => {
+  if (!isConnected || !address) return;
 
-  useEffect(() => {
-    if (!isConnected || !address) return;
-    const t = setTimeout(loadTokens, 400);
-    return () => clearTimeout(t);
-  }, [isConnected, address]);
+  console.log("miniapp: wallet connected → calling ready()");
+  sdk.actions.ready();
+}, [isConnected, address]);
+
+// Load tokens setelah wallet connect
+useEffect(() => {
+  if (!isConnected || !address) return;
+  const t = setTimeout(loadTokens, 400);
+  return () => clearTimeout(t);
+}, [isConnected, address]);
 
   const loadTokens = async () => {
     if (!address) return;
