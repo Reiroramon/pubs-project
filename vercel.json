@@ -5,5 +5,11 @@
       "destination": "https://api.farcaster.xyz/miniapps/hosted-manifest/019a97ea-3386-18dd-941f-137377bb7efe",
       "statusCode": 307
     }
+  ],
+  "cron": [
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 15 * * *"
+    }
   ]
 }
