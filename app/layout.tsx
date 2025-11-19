@@ -2,7 +2,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
-import { MiniAppProvider } from "@neynar/react"; // ⬅ Tambahan
+import { MiniAppWrapper } from "./miniapp-provider"; // ⬅ gunakan wrapper client
 
 const miniapp = {
   version: "1",
@@ -24,32 +24,19 @@ export const metadata: Metadata = {
   description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
   openGraph: {
     title: "PUBS BURN",
-    description: "Easy ways to make your wallet cleans — Burn scam tokens instantly!",
     url: "https://pubs-burn.vercel.app",
-    images: [
-      {
-        url: "https://pubs-burn.vercel.app/hiro.png",
-        width: 1200,
-        height: 630,
-      },
-    ],
+    images: [{ url: "https://pubs-burn.vercel.app/hiro.png", width: 1200, height: 630 }],
   },
-  other: {
-    "fc:miniapp": JSON.stringify(miniapp),
-  },
+  other: { "fc:miniapp": JSON.stringify(miniapp) },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <MiniAppProvider> {/* ⬅ Bungkus di sini */}
+        <MiniAppWrapper>
           <Providers>{children}</Providers>
-        </MiniAppProvider>
+        </MiniAppWrapper>
       </body>
     </html>
   );
