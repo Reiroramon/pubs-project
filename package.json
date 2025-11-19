@@ -9,11 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@farcaster/frame-sdk": "^0.1.12",
     "@farcaster/miniapp-node": "^0.1.11",
     "@farcaster/miniapp-sdk": "^0.2.1",
     "@farcaster/miniapp-wagmi-connector": "^1.1.0",
     "@neynar/nodejs-sdk": "^3.78.0",
-    "@prisma/client": "^6.19.0",
+    "@neynar/react": "^1.2.22",
     "@tanstack/react-query": "^5.90.9",
     "axios": "^1.13.2",
     "ethers": "^6.15.0",
@@ -33,7 +34,6 @@
     "debug": "^4.4.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
-    "prisma": "^6.19.0",
     "typescript": "^5"
   }
 }

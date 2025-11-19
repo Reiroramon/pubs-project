@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { MiniAppProvider } from "@neynar/react"; // ⬅ Tambahan
 
 const miniapp = {
   version: "1",
@@ -38,11 +39,17 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <MiniAppProvider> {/* ⬅ Bungkus di sini */}
+          <Providers>{children}</Providers>
+        </MiniAppProvider>
       </body>
     </html>
   );
