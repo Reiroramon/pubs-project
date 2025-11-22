@@ -7,6 +7,7 @@ import { useAccount } from "wagmi";
 import { ethers } from "ethers";
 import { FiAlertTriangle } from "react-icons/fi";
 import { Wallet } from "@coinbase/onchainkit/wallet";
+import { FiSearch, FiBell } from "react-icons/fi";
 
 /* ===========================
     CONFIG
@@ -24,21 +25,17 @@ const ERC20_ABI = [
 ];
 
 /* ===========================
-    LOAD USER PROFILE (PFP)
+    FARCASTER USER (PFP)
 =========================== */
 function useFarcasterUser() {
   const [pfp, setPfp] = useState<string | null>(null);
 
   useEffect(() => {
-    // context biasanya sudah tersedia
-    const fallback = "https://i.imgur.com/5cY8XGQ.png"; // default farcaster-style avatar
-
+    const fallback = "https://i.imgur.com/5cY8XGQ.png";
     try {
       const ctx = (sdk as any)?.context;
       const url = ctx?.user?.pfpUrl;
-
-      if (url && url.length > 2) setPfp(url);
-      else setPfp(fallback);
+      setPfp(url && url.length > 2 ? url : fallback);
     } catch {
       setPfp(null);
     }
@@ -46,10 +43,28 @@ function useFarcasterUser() {
 
   return pfp;
 }
-/* ===========================
-    TOKEN CARD (PREMIUM)
-=========================== */
 
+/* ===========================
+    FARCASTER WALLET POPUP
+=========================== */
+async function requestFarcasterWallet() {
+  const provider = (sdk as any)?.wallet?.ethProvider;
+
+  if (!provider) {
+    console.warn("Farcaster provider not available");
+    return null;
+  }
+
+  // THIS LINE triggers Farcaster Wallet popup
+  await provider.request({
+    method: "eth_requestAccounts",
+  });
+
+  return provider;
+}
+/* ===========================
+    TOKEN CARD
+=========================== */
 interface TokenCardProps {
   token: any;
   active: boolean;
@@ -71,7 +86,11 @@ function TokenCard({ token, active, onSelect, userPfp }: TokenCardProps) {
       <button
         onClick={onSelect}
         className={`w-full p-4 rounded-2xl border flex items-center gap-4 transition-all relative
-          ${active ? "border-[#0052FF] bg-[#121212]" : "border-[#222] bg-[#151515] hover:bg-[#1b1b1b]"}`}
+          ${
+            active
+              ? "border-[#0052FF] bg-[#121212]"
+              : "border-[#222] bg-[#151515] hover:bg-[#1b1b1b]"
+          }`}
       >
         {/* Token Logo */}
         <div className="relative">
@@ -88,7 +107,7 @@ function TokenCard({ token, active, onSelect, userPfp }: TokenCardProps) {
           )}
         </div>
 
-        {/* Token Info */}
+        {/* Info */}
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="text-white font-semibold text-[15px] truncate">
             {token.name}
@@ -119,30 +138,27 @@ function TokenCard({ token, active, onSelect, userPfp }: TokenCardProps) {
     </div>
   );
 }
+
 /* ===========================
-    NAVBAR + SEARCH + BATCH BAR
+    NAVBAR
 =========================== */
-
-import { FiSearch, FiBell } from "react-icons/fi";
-
 function Navbar() {
   return (
     <div className="w-full max-w-md flex items-center justify-between mb-6 px-1">
       <h1 className="text-xl font-bold tracking-wide">PUBS BURN</h1>
+
       <div className="flex items-center gap-4">
         <FiBell size={20} className="text-gray-300 cursor-pointer" />
-        <Wallet />
+        <Wallet /> {/* OnchainKit Wallet for Base App */}
       </div>
     </div>
   );
 }
 
-interface SearchProps {
-  value: string;
-  onChange: (v: string) => void;
-}
-
-function SearchBar({ value, onChange }: SearchProps) {
+/* ===========================
+    SEARCH BAR
+=========================== */
+function SearchBar({ value, onChange }: any) {
   return (
     <div className="w-full max-w-md mb-4">
       <div className="flex items-center bg-[#1a1a1a] border border-[#333] rounded-xl px-3 py-2">
@@ -158,20 +174,16 @@ function SearchBar({ value, onChange }: SearchProps) {
   );
 }
 
-interface BatchBurnProps {
-  count: number;
-  onBurn: () => void;
-}
-
-function BatchBurnBar({ count, onBurn }: BatchBurnProps) {
+/* ===========================
+    BATCH BURN BAR
+=========================== */
+function BatchBurnBar({ count, onBurn }: any) {
   if (count === 0) return null;
 
   return (
     <div className="w-full max-w-md sticky top-0 z-30 mb-4">
       <div className="bg-[#0d0d0d]/90 backdrop-blur-md border border-[#222] rounded-xl px-4 py-3 flex items-center justify-between shadow-lg">
-        <span className="text-gray-200 text-sm">
-          {count} token selected
-        </span>
+        <span className="text-gray-200 text-sm">{count} token selected</span>
 
         <button
           onClick={onBurn}
@@ -187,6 +199,24 @@ function BatchBurnBar({ count, onBurn }: BatchBurnProps) {
     APPROVE + BURN LOGIC
 =========================== */
 
+// FARCASTER WALLET SIGNER (POPUP)
+async function getFarcasterSigner() {
+  const eth = (sdk as any)?.wallet?.ethProvider;
+
+  if (!eth) {
+    console.warn("Farcaster provider not available");
+    return null;
+  }
+
+  // Trigger wallet popup in Farcaster Miniapp
+  await eth.request({
+    method: "eth_requestAccounts",
+  });
+
+  const provider = new ethers.BrowserProvider(eth);
+  return provider.getSigner();
+}
+
 function useBurnActions(tokens: any[], selected: string[], setSelected: any, setStatus: any) {
   const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
   const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
@@ -201,12 +231,20 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
     setStatus("🔥 Starting burn...");
 
     try {
-      const provider = new ethers.BrowserProvider((sdk as any).wallet.ethProvider);
-      const signer = await provider.getSigner();
+      // Always use Farcaster signer (popup triggered)
+      const signer = await getFarcasterSigner();
+      if (!signer) {
+        setStatus("Could not connect wallet");
+        return;
+      }
+
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
       const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
-      /* APPROVAL PHASE */
+      /* ==========================
+          APPROVAL PHASE
+      =========================== */
+
       const needApproval = selected.filter((t) => !approvedTokens.includes(t));
 
       for (const tokenAddress of needApproval) {
@@ -219,6 +257,7 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
 
           const erc20 = new ethers.Contract(row.address, ERC20_ABI, signer);
           const tx = await erc20.approve(CONTRACT, row.rawBalance);
+
           await rpc.waitForTransaction(tx.hash);
 
           setApprovedTokens((prev) => [...prev, tokenAddress]);
@@ -233,7 +272,10 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
         }
       }
 
-      /* BURN PHASE */
+      /* ==========================
+          BURN PHASE
+      =========================== */
+
       for (const tokenAddress of selected) {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
@@ -243,7 +285,10 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
           setOverlayMessage(`Burning ${row.symbol}...`);
 
           const contract = new ethers.Contract(CONTRACT, ABI, signer);
-          const [feeRequired] = await contract.quoteErc20Fee(row.address, row.rawBalance);
+          const [feeRequired] = await contract.quoteErc20Fee(
+            row.address,
+            row.rawBalance
+          );
 
           const iface = new ethers.Interface(ABI);
           const data = iface.encodeFunctionData("burnToken", [
@@ -272,9 +317,11 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
         }
       }
 
+      /* Done */
       setStatus("🎉 Burn complete!");
       setSelected([]);
     } catch (err) {
+      console.error(err);
       setOverlayLoading(false);
       setStatus("Unexpected error");
     }
@@ -284,13 +331,11 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
     burn,
     approvedTokens,
     lastBurnTx,
-
     overlayLoading,
     overlayMessage,
     overlaySuccess,
   };
 }
-
 /* ===========================
     OVERLAY COMPONENTS
 =========================== */
@@ -315,6 +360,7 @@ function SuccessToast({ text }: { text: string }) {
     </div>
   );
 }
+
 /* ===========================
     MAIN PAGE RENDER
 =========================== */
@@ -322,7 +368,7 @@ function SuccessToast({ text }: { text: string }) {
 export default function Page() {
   const { address, isConnected } = useAccount();
 
-  const pfp = useFarcasterUser();      // floating avatar
+  const pfp = useFarcasterUser();
   const [tokens, setTokens] = useState<any[]>([]);
   const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -356,13 +402,20 @@ export default function Page() {
   useEffect(() => {
     if (search.trim() === "") return setFiltered(tokens);
     const q = search.toLowerCase();
-    setFiltered(tokens.filter((t) =>
-      t.name.toLowerCase().includes(q) ||
-      t.symbol.toLowerCase().includes(q)
-    ));
+    setFiltered(
+      tokens.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.symbol.toLowerCase().includes(q)
+      )
+    );
   }, [search, tokens]);
 
-  /* Actual loadTokens copied from earlier logic */
+
+  /* ===========================
+      LOAD TOKENS FROM ALCHEMY
+  ============================ */
+
   async function loadTokens() {
     const key = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
     if (!key) return setStatus("Alchemy key missing");
@@ -402,19 +455,24 @@ export default function Page() {
       setFiltered(baseList);
       setStatus("Select token to burn");
 
-      /* fetch metadata one by one */
+      /* ===========================
+          Load metadata per token
+      ============================ */
       baseList.forEach(async (token: any, i: number) => {
         try {
-          const metaRes = await fetch(`https://base-mainnet.g.alchemy.com/v2/${key}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: 2,
-              jsonrpc: "2.0",
-              method: "alchemy_getTokenMetadata",
-              params: [token.address],
-            }),
-          });
+          const metaRes = await fetch(
+            `https://base-mainnet.g.alchemy.com/v2/${key}`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                id: 2,
+                jsonrpc: "2.0",
+                method: "alchemy_getTokenMetadata",
+                params: [token.address],
+              }),
+            }
+          );
 
           const meta = await metaRes.json();
           const r = meta?.result;
@@ -424,16 +482,21 @@ export default function Page() {
             token.name = r.name || r.symbol || "Token";
             token.symbol = r.symbol || "";
             token.logoUrl = r.logo || "/token.png";
-            token.balance = ethers.formatUnits(token.rawBalance, token.decimals);
+            token.balance = ethers.formatUnits(
+              token.rawBalance,
+              token.decimals
+            );
           }
 
+          /* Price (DexScreener) */
           try {
             const priceRes = await fetch(
               `https://api.dexscreener.com/latest/dex/tokens/${token.address}`
             );
-
             const priceJ = await priceRes.json();
+
             token.price = priceJ?.pairs?.[0]?.priceUsd ?? null;
+
             const img = priceJ?.pairs?.[0]?.info?.imageUrl;
             if (img) token.logoUrl = img;
 
@@ -441,6 +504,7 @@ export default function Page() {
           } catch {}
         } catch {}
 
+        // update state
         setTokens((prev) => {
           const updated = [...prev];
           updated[i] = { ...token };
@@ -451,7 +515,6 @@ export default function Page() {
       setStatus("❌ Failed to scan tokens");
     }
   }
-
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white px-5 py-6 flex flex-col items-center">
 
@@ -465,13 +528,15 @@ export default function Page() {
       <BatchBurnBar count={selected.length} onBurn={burn} />
 
       {/* Tokens Grid */}
-      <div className="
-        w-full max-w-md grid gap-4
-        grid-cols-1
-        sm:grid-cols-2
-        md:grid-cols-3
-        mb-6
-      ">
+      <div
+        className="
+          w-full max-w-md grid gap-4
+          grid-cols-1
+          sm:grid-cols-2
+          md:grid-cols-3
+          mb-6
+        "
+      >
         {filtered.length === 0 ? (
           <div className="text-gray-500 text-sm col-span-full text-center">
             No tokens found.
@@ -506,11 +571,13 @@ export default function Page() {
       {/* Share button */}
       {lastBurnTx && (
         <button
-          onClick={() => sdk.actions.openUrl(
-            `https://warpcast.com/~/compose?text=${encodeURIComponent(
-              `I burned scam tokens with PUBS BURN 🔥♻️\nTry it here:\n${MINIAPP_URL}`
-            )}`
-          )}
+          onClick={() =>
+            sdk.actions.openUrl(
+              `https://warpcast.com/~/compose?text=${encodeURIComponent(
+                `I burned scam tokens with PUBS BURN 🔥♻️\nTry it here:\n${MINIAPP_URL}`
+              )}`
+            )
+          }
           className="w-full max-w-md py-3 rounded-xl bg-[#0052FF] hover:bg-[#1A66FF] font-semibold mb-4"
         >
           📣 Share on Warpcast
@@ -518,13 +585,8 @@ export default function Page() {
       )}
 
       {/* Overlays */}
-      {overlayLoading && (
-        <LoadingOverlay message={overlayMessage} />
-      )}
-
-      {overlaySuccess && (
-        <SuccessToast text={overlaySuccess} />
-      )}
+      {overlayLoading && <LoadingOverlay message={overlayMessage} />}
+      {overlaySuccess && <SuccessToast text={overlaySuccess} />}
 
       {/* Status */}
       <p className="text-center text-sm text-gray-400 mt-4 mb-10">
@@ -533,7 +595,8 @@ export default function Page() {
 
       {/* Footer */}
       <div className="text-center text-xs text-gray-500 pb-10">
-        PUBS BURN • Base Miniapp<br />
+        PUBS BURN • Base Miniapp
+        <br />
         <span className="text-gray-600">Always verify before burning tokens.</span>
       </div>
     </div>
