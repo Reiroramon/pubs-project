@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@coinbase/onchainkit": "^1.1.2",
     "@farcaster/frame-sdk": "^0.1.12",
     "@farcaster/miniapp-node": "^0.1.11",
     "@farcaster/miniapp-sdk": "^0.2.1",
@@ -30,11 +31,11 @@
     "@tailwindcss/postcss": "^4",
     "@types/debug": "^4.1.12",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^19.2.6",
+    "@types/react-dom": "^19.2.3",
     "debug": "^4.4.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   }
 }

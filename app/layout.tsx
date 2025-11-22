@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { MiniAppWrapper } from "./miniapp-provider"; // ⬅ gunakan wrapper client
+import "@coinbase/onchainkit/styles.css";
 
 const miniapp = {
   version: "1",
