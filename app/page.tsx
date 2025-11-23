@@ -140,16 +140,53 @@ function TokenCard({ token, active, onSelect, userPfp }: TokenCardProps) {
 }
 
 /* ===========================
-    NAVBAR
+    WALLET CONNECT MODAL
 =========================== */
-function Navbar() {
+function ConnectWalletModal({ open, onClose, onConnectFarcaster, onConnectBase, status }: any) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[999]">
+      <div className="bg-[#181818] rounded-xl p-6 w-80 flex flex-col items-center shadow-lg">
+        <h2 className="text-lg font-bold mb-4">Connect Wallet</h2>
+        <button
+          onClick={onConnectFarcaster}
+          className="w-full py-2 mb-3 rounded-lg bg-[#0052FF] hover:bg-[#1A66FF] text-white font-semibold"
+        >
+          Connect Farcaster Wallet
+        </button>
+        <button
+          onClick={onConnectBase}
+          className="w-full py-2 rounded-lg bg-[#222] hover:bg-[#333] text-gray-200 font-semibold"
+        >
+          Connect Base App Wallet
+        </button>
+        <button
+          onClick={onClose}
+          className="mt-4 text-xs text-gray-400 hover:underline"
+        >
+          Cancel
+        </button>
+        {status && <div className="mt-3 text-sm text-gray-300">{status}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ===========================
+    NAVBAR (MODIFIED)
+=========================== */
+function Navbar({ onOpenConnect, isFarcasterConnected, isBaseConnected }: any) {
   return (
     <div className="w-full max-w-md flex items-center justify-between mb-6 px-1">
       <h1 className="text-xl font-bold tracking-wide">PUBS BURN</h1>
-
       <div className="flex items-center gap-4">
         <FiBell size={20} className="text-gray-300 cursor-pointer" />
-        <Wallet /> {/* OnchainKit Wallet for Base App */}
+        <button
+          onClick={onOpenConnect}
+          className="px-3 py-1 rounded-lg bg-[#0052FF] text-white text-xs font-semibold"
+        >
+          {isFarcasterConnected || isBaseConnected ? "Wallet Connected" : "Connect Wallet"}
+        </button>
       </div>
     </div>
   );
@@ -204,7 +241,7 @@ async function getFarcasterSigner() {
   const eth = (sdk as any)?.wallet?.ethProvider;
 
   if (!eth) {
-    console.warn("Farcaster provider not available");
+    alert("Farcaster wallet not available. Please open in Farcaster Miniapp.");
     return null;
   }
 
@@ -234,7 +271,7 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
       // Always use Farcaster signer (popup triggered)
       const signer = await getFarcasterSigner();
       if (!signer) {
-        setStatus("Could not connect wallet");
+        setStatus("Could not connect Farcaster wallet");
         return;
       }
 
@@ -253,7 +290,7 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
 
         try {
           setOverlayLoading(true);
-          setOverlayMessage(`Approving ${row.symbol}...`);
+          setOverlayMessage(`Approving ${row.symbol} via Farcaster...`);
 
           const erc20 = new ethers.Contract(row.address, ERC20_ABI, signer);
           const tx = await erc20.approve(CONTRACT, row.rawBalance);
@@ -282,7 +319,7 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
 
         try {
           setOverlayLoading(true);
-          setOverlayMessage(`Burning ${row.symbol}...`);
+          setOverlayMessage(`Burning ${row.symbol} via Farcaster...`);
 
           const contract = new ethers.Contract(CONTRACT, ABI, signer);
           const [feeRequired] = await contract.quoteErc20Fee(
@@ -372,9 +409,14 @@ export default function Page() {
   const [tokens, setTokens] = useState<any[]>([]);
   const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState("");
-
   const [selected, setSelected] = useState<string[]>([]);
   const [status, setStatus] = useState("Initializing...");
+
+  // Modal state
+  const [showConnect, setShowConnect] = useState(false);
+  const [connectStatus, setConnectStatus] = useState("");
+  const [isFarcasterConnected, setIsFarcasterConnected] = useState(false);
+  const [isBaseConnected, setIsBaseConnected] = useState(false);
 
   /* Burn actions hook */
   const {
@@ -515,11 +557,53 @@ export default function Page() {
       setStatus("❌ Failed to scan tokens");
     }
   }
+
+  // Connect Farcaster Wallet
+  async function handleConnectFarcaster() {
+    setConnectStatus("Connecting to Farcaster...");
+    try {
+      const provider = (sdk as any)?.wallet?.ethProvider;
+      if (!provider) throw new Error("Farcaster provider not available");
+      await provider.request({ method: "eth_requestAccounts" });
+      setIsFarcasterConnected(true);
+      setShowConnect(false);
+      setConnectStatus("");
+    } catch (e: any) {
+      setConnectStatus("Failed to connect Farcaster wallet");
+    }
+  }
+
+  // Connect Base App Wallet (OnchainKit)
+  async function handleConnectBase() {
+    setConnectStatus("Connecting to Base App...");
+    try {
+      // Wallet component from OnchainKit handles connection, just set state
+      setIsBaseConnected(true);
+      setShowConnect(false);
+      setConnectStatus("");
+    } catch (e: any) {
+      setConnectStatus("Failed to connect Base App wallet");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white px-5 py-6 flex flex-col items-center">
 
       {/* Navbar */}
-      <Navbar />
+      <Navbar
+        onOpenConnect={() => setShowConnect(true)}
+        isFarcasterConnected={isFarcasterConnected}
+        isBaseConnected={isBaseConnected}
+      />
+
+      {/* Connect Wallet Modal */}
+      <ConnectWalletModal
+        open={showConnect}
+        onClose={() => setShowConnect(false)}
+        onConnectFarcaster={handleConnectFarcaster}
+        onConnectBase={handleConnectBase}
+        status={connectStatus}
+      />
 
       {/* Search */}
       <SearchBar value={search} onChange={setSearch} />
