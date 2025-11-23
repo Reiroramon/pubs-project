@@ -254,6 +254,33 @@ async function getFarcasterSigner() {
   return provider.getSigner();
 }
 
+// Ambil provider aktif (Farcaster atau Base App)
+function getActiveProvider() {
+  // Farcaster Miniapp
+  const farcasterProvider = (sdk as any)?.wallet?.ethProvider;
+  if (farcasterProvider) return farcasterProvider;
+
+  // Base App (misal injected wallet)
+  if (typeof window !== "undefined" && (window as any).ethereum) {
+    return (window as any).ethereum;
+  }
+
+  return null;
+}
+
+// Ambil signer aktif (trigger pop-up sign saat transaksi)
+async function getActiveSigner() {
+  const provider = getActiveProvider();
+  if (!provider) {
+    alert("No wallet provider found. Open in Farcaster or Base App.");
+    return null;
+  }
+  // Trigger wallet connect (eth_requestAccounts) jika belum
+  await provider.request({ method: "eth_requestAccounts" });
+  const ethersProvider = new ethers.BrowserProvider(provider);
+  return ethersProvider.getSigner();
+}
+
 function useBurnActions(tokens: any[], selected: string[], setSelected: any, setStatus: any) {
   const [approvedTokens, setApprovedTokens] = useState<string[]>([]);
   const [lastBurnTx, setLastBurnTx] = useState<string | null>(null);
@@ -268,29 +295,25 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
     setStatus("🔥 Starting burn...");
 
     try {
-      // Always use Farcaster signer (popup triggered)
-      const signer = await getFarcasterSigner();
+      // Gunakan signer aktif (Farcaster/BaseApp), pop-up sign muncul di sini
+      const signer = await getActiveSigner();
       if (!signer) {
-        setStatus("Could not connect Farcaster wallet");
+        setStatus("Could not connect wallet");
         return;
       }
 
       const contract = new ethers.Contract(CONTRACT, ABI, signer);
       const rpc = new ethers.JsonRpcProvider("https://mainnet.base.org");
 
-      /* ==========================
-          APPROVAL PHASE
-      =========================== */
-
+      // APPROVAL
       const needApproval = selected.filter((t) => !approvedTokens.includes(t));
-
       for (const tokenAddress of needApproval) {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
         try {
           setOverlayLoading(true);
-          setOverlayMessage(`Approving ${row.symbol} via Farcaster...`);
+          setOverlayMessage(`Approving ${row.symbol}...`);
 
           const erc20 = new ethers.Contract(row.address, ERC20_ABI, signer);
           const tx = await erc20.approve(CONTRACT, row.rawBalance);
@@ -298,7 +321,6 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
           await rpc.waitForTransaction(tx.hash);
 
           setApprovedTokens((prev) => [...prev, tokenAddress]);
-
           setOverlayLoading(false);
           setOverlaySuccess(`${row.symbol} Approved`);
           setTimeout(() => setOverlaySuccess(""), 1200);
@@ -309,17 +331,14 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
         }
       }
 
-      /* ==========================
-          BURN PHASE
-      =========================== */
-
+      // BURN
       for (const tokenAddress of selected) {
         const row = tokens.find((t) => t.address === tokenAddress);
         if (!row) continue;
 
         try {
           setOverlayLoading(true);
-          setOverlayMessage(`Burning ${row.symbol} via Farcaster...`);
+          setOverlayMessage(`Burning ${row.symbol}...`);
 
           const contract = new ethers.Contract(CONTRACT, ABI, signer);
           const [feeRequired] = await contract.quoteErc20Fee(
@@ -354,7 +373,6 @@ function useBurnActions(tokens: any[], selected: string[], setSelected: any, set
         }
       }
 
-      /* Done */
       setStatus("🎉 Burn complete!");
       setSelected([]);
     } catch (err) {
@@ -585,6 +603,19 @@ export default function Page() {
       setConnectStatus("Failed to connect Base App wallet");
     }
   }
+
+  // Connect wallet otomatis saat mount
+  useEffect(() => {
+    async function autoConnect() {
+      const provider = getActiveProvider();
+      if (provider) {
+        try {
+          await provider.request({ method: "eth_requestAccounts" });
+        } catch {}
+      }
+    }
+    autoConnect();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white px-5 py-6 flex flex-col items-center">
